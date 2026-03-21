@@ -15,15 +15,16 @@ local AimbotSettings = {
     snapEnabled = true,
     snapFov = 150,
     snapColor = Color3.fromRGB(255, 50, 50),
-    tracers = false,
-    tracerColor = Color3.fromRGB(255, 50, 50),
+    bulletTracers = false,
+    bulletTracerColor = Color3.fromRGB(255, 200, 0),
     tracerChams = false,
     tracerChamColor = Color3.fromRGB(255, 50, 50),
     tracerDistance = false,
     tracerHealth = false,
+    tracers = false,
+    tracerColor = Color3.fromRGB(255, 50, 50),
 }
 
--- wait for camera to be ready
 task.wait(1)
 
 local cam = workspace.CurrentCamera
@@ -79,10 +80,62 @@ local snapIn = false
 local snapTarget = nil
 local snapOrigCF = nil
 
+-- BULLET TRACERS
+local effects = workspace:WaitForChild("Effects")
+
+local function drawBulletTracer(beam)
+    local att0 = beam.Attachment0
+    local att1 = beam.Attachment1
+    if not att0 or not att1 then return end
+
+    local line = Drawing.new("Line")
+    line.Thickness = 2
+    line.Color = AimbotSettings.bulletTracerColor
+    line.Visible = true
+    line.Transparency = 0
+
+    local startTime = tick()
+    local duration = 0.2
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function()
+        if not att0 or not att0.Parent or not att1 or not att1.Parent then
+            line:Remove()
+            conn:Disconnect()
+            return
+        end
+
+        local elapsed = tick() - startTime
+        if elapsed > duration then
+            line:Remove()
+            conn:Disconnect()
+            return
+        end
+
+        local sp0, on0 = worldToScreen(att0.WorldPosition)
+        local sp1, on1 = worldToScreen(att1.WorldPosition)
+
+        if on0 or on1 then
+            line.From = sp0
+            line.To = sp1
+            line.Color = AimbotSettings.bulletTracerColor
+            line.Transparency = elapsed / duration
+            line.Visible = true
+        else
+            line.Visible = false
+        end
+    end)
+end
+
+effects.DescendantAdded:Connect(function(obj)
+    if obj.Name == "BulletTracer" and obj:IsA("Beam") and AimbotSettings.bulletTracers then
+        drawBulletTracer(obj)
+    end
+end)
+
 RunService.RenderStepped:Connect(function()
     local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 
-    -- FOV CIRCLES always force visible
     fovCircle.Position = screenCenter
     fovCircle.Radius = AimbotSettings.fov
     fovCircle.Color = AimbotSettings.fovColor
@@ -129,7 +182,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- TRACERS + OPTIONS
+    -- PLAYER TRACERS
     for _, player in pairs(Players:GetPlayers()) do
         if player == localPlayer then continue end
 
@@ -138,7 +191,6 @@ RunService.RenderStepped:Connect(function()
             line.Thickness = 1
             line.Visible = false
             tracerLines[player] = line
-
             local label = Drawing.new("Text")
             label.Size = 13
             label.Center = true
@@ -155,14 +207,12 @@ RunService.RenderStepped:Connect(function()
 
         if AimbotSettings.tracers and hrp and hum and hum.Health > 0 then
             local sp, onScreen, dist = worldToScreen(hrp.Position)
-
             if onScreen then
                 line.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y)
                 line.To = sp
                 line.Color = AimbotSettings.tracerColor
                 line.Visible = true
 
-                -- tracer chams - forcefield material color overlay
                 if AimbotSettings.tracerChams then
                     for _, part in pairs(char:GetDescendants()) do
                         if part:IsA("BasePart") then
@@ -177,17 +227,13 @@ RunService.RenderStepped:Connect(function()
                     end
                 end
 
-                -- label above tracer line
                 local labelParts = {}
                 if AimbotSettings.tracerDistance then
                     table.insert(labelParts, math.floor(dist) .. "m")
                 end
                 if AimbotSettings.tracerHealth then
-                    local hp = math.floor(hum.Health)
-                    local maxhp = math.floor(hum.MaxHealth)
-                    table.insert(labelParts, hp .. "/" .. maxhp .. "hp")
+                    table.insert(labelParts, math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth) .. "hp")
                 end
-
                 if #labelParts > 0 then
                     label.Text = table.concat(labelParts, " | ")
                     label.Position = Vector2.new(sp.X, sp.Y - 20)
@@ -230,9 +276,11 @@ SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, R
 SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.snapColor = c end })
 
 local TracerSection = Aimbot:AddSection({ Name = "Tracers", Position = "right" })
-TracerSection:AddToggle({ Name = "Enable Tracers", Default = false, Callback = function(v) AimbotSettings.tracers = v end })
+TracerSection:AddToggle({ Name = "Player Tracers", Default = false, Callback = function(v) AimbotSettings.tracers = v end })
 TracerSection:AddToggle({ Name = "Show Distance", Default = false, Callback = function(v) AimbotSettings.tracerDistance = v end })
 TracerSection:AddToggle({ Name = "Show Health", Default = false, Callback = function(v) AimbotSettings.tracerHealth = v end })
 TracerSection:AddToggle({ Name = "Chams", Default = false, Callback = function(v) AimbotSettings.tracerChams = v end })
 TracerSection:AddColorPicker({ Name = "Tracer Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerColor = c end })
 TracerSection:AddColorPicker({ Name = "Cham Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerChamColor = c end })
+TracerSection:AddToggle({ Name = "Bullet Tracers", Default = false, Callback = function(v) AimbotSettings.bulletTracers = v end })
+TracerSection:AddColorPicker({ Name = "Bullet Color", Default = Color3.fromRGB(255,200,0), Callback = function(c) AimbotSettings.bulletTracerColor = c end })
