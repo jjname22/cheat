@@ -1,0 +1,55 @@
+local VERIFY_URL = "https://keysystem2.vercel.app"
+local HttpService = game:GetService("HttpService")
+
+local function httpGet(url)
+    if syn and syn.request then
+        return syn.request({Url = url, Method = "GET"}).Body
+    elseif http_request then
+        return http_request({Url = url, Method = "GET"}).Body
+    elseif request then
+        return request({Url = url, Method = "GET"}).Body
+    else
+        return game:HttpGet(url)
+    end
+end
+
+local function validate()
+    local key = getgenv()._AUTH_KEY
+    local hwid = getgenv()._AUTH_HWID
+    if not key or not hwid then return false end
+    local ok, raw = pcall(function()
+        return httpGet(VERIFY_URL .. "/api/checkhwid?hwid=" .. hwid)
+    end)
+    if not ok then return false end
+    local data = HttpService:JSONDecode(raw)
+    return data.valid == true and data.key == key
+end
+
+if not validate() then error("unauthorized") return end
+
+local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
+
+if not gethui then getgenv().gethui = function() return game:GetService("CoreGui") end end
+if not protect_gui then getgenv().protect_gui = function() end end
+
+local Fatality = loadstring(httpGet("https://raw.githubusercontent.com/4lpaca-pin/Fatality/refs/heads/main/src/source.luau"))()
+
+local Window = Fatality.new({
+    Name = "MDMA",
+    Keybind = "RightShift",
+    Expire = expiry,
+})
+
+getgenv()._MDMA_WINDOW = Window
+
+loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/esp"))()
+loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/aimbot"))()
+loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/world"))()
+loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/settings"))()
+
+Window.Notifier:Notify({
+    Title = "Welcome to MDMA",
+    Content = "Expires: " .. expiry,
+    Icon = "check-circle",
+    Duration = 5,
+})
