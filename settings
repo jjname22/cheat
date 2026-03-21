@@ -3,9 +3,8 @@ local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
 
-local currentKeybind = Enum.KeyCode.RightShift
+local currentKeybind = Enum.KeyCode.Insert
 
--- listen for keybind and toggle window
 UIS.InputBegan:Connect(function(input, typing)
     if typing then return end
     if input.KeyCode == currentKeybind then
@@ -17,14 +16,18 @@ local Settings = Window:AddMenu({ Name = "Settings", Icon = "settings" })
 
 local UISection = Settings:AddSection({ Name = "Interface", Position = "left" })
 
-UISection:AddKeybind({ Name = "Toggle Menu", Default = Enum.KeyCode.RightShift, Callback = function(k)
-    -- update keybind when user selects new one
+UISection:AddKeybind({ Name = "Toggle Menu", Default = Enum.KeyCode.Insert, Callback = function(k)
     local ok, key = pcall(function()
         return typeof(k) == "string" and Enum.KeyCode[k] or k
     end)
     if ok and key then
         currentKeybind = key
-        print("menu keybind set to: " .. tostring(key))
+        Window.Notifier:Notify({
+            Title = "Keybind Updated",
+            Content = "Menu toggle set to: " .. tostring(key),
+            Icon = "keyboard",
+            Duration = 3,
+        })
     end
 end })
 
