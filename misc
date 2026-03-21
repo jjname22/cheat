@@ -1,22 +1,72 @@
-
 local Window = getgenv()._MDMA_WINDOW
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local localPlayer = Players.LocalPlayer
+local VIM = game:GetService("VirtualInputManager")
+local lp = Players.LocalPlayer
 
 local MiscSettings = {
-    flyEnabled = false,
+    speedOn = false,
+    speed = 25,
+    MAX_SPEED = 27.5,
+    flyOn = false,
     flySpeed = 50,
     noclip = false,
+    vehicleFlyOn = false,
+    vehicleFlySpeed = 80,
 }
 
-local flyConnection = nil
-local bodyVelocity = nil
-local bodyGyro = nil
+-- SPRINT HELPERS
+local function sendKey(key, down)
+    pcall(function()
+        VIM:SendKeyEvent(down, key, false, game)
+    end)
+end
 
-local function enableFly()
-    local char = localPlayer.Character
+local function enableAutoSprint()
+    sendKey(Enum.KeyCode.RightShift, true)
+    task.wait(0.1)
+    sendKey(Enum.KeyCode.RightShift, false)
+end
+
+local function disableAutoSprint()
+    sendKey(Enum.KeyCode.RightShift, true)
+    task.wait(0.1)
+    sendKey(Enum.KeyCode.RightShift, false)
+end
+
+-- SPEED HACK
+RunService.Heartbeat:Connect(function(dt)
+    if not MiscSettings.speedOn then return end
+    local char = lp.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+    if hum.MoveDirection.Magnitude == 0 then return end
+
+    hum:ChangeState(Enum.HumanoidStateType.Running)
+
+    local move = hum.MoveDirection * MiscSettings.speed * dt
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterDescendantsInstances = {char}
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    local result = workspace:Raycast(hrp.Position, Vector3.new(0, -5, 0), rayParams)
+
+    local newPos = hrp.Position + move
+    if result then
+        newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z)
+    end
+
+    hrp.CFrame = CFrame.new(newPos) * (hrp.CFrame - hrp.CFrame.Position)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+end)
+
+-- PLAYER FLY
+RunService.Heartbeat:Connect(function(dt)
+    if not MiscSettings.flyOn then return end
+    local char = lp.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChild("Humanoid")
@@ -24,75 +74,84 @@ local function enableFly()
 
     hum.PlatformStand = true
 
-    bodyVelocity = Instance.new("BodyVelocity")
-    bodyVelocity.Velocity = Vector3.zero
-    bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-    bodyVelocity.Parent = hrp
+    local cam = workspace.CurrentCamera
+    local dir = Vector3.zero
+    local spd = MiscSettings.flySpeed
+    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then spd = spd * 2 end
+    if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
+    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
 
-    bodyGyro = Instance.new("BodyGyro")
-    bodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
-    bodyGyro.D = 50
-    bodyGyro.P = 1000
-    bodyGyro.CFrame = hrp.CFrame
-    bodyGyro.Parent = hrp
+    if dir.Magnitude > 0 then
+        hrp.CFrame = CFrame.new(hrp.Position + dir.Unit * spd * dt) * (cam.CFrame - cam.CFrame.Position)
+    end
+    hrp.AssemblyLinearVelocity = Vector3.zero
+end)
 
-    flyConnection = RunService.RenderStepped:Connect(function()
-        if not MiscSettings.flyEnabled then return end
-        local cam = workspace.CurrentCamera
-        local dir = Vector3.zero
-        local speed = MiscSettings.flySpeed
+-- VEHICLE FLY
+-- finds whatever vehicle the player is sitting in and moves it
+RunService.Heartbeat:Connect(function(dt)
+    if not MiscSettings.vehicleFlyOn then return end
+    local char = lp.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return end
 
-        if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+    -- find seat the player is in
+    local seat = hum.SeatPart
+    if not seat then return end
 
-        if dir.Magnitude > 0 then
-            bodyVelocity.Velocity = dir.Unit * speed
+    -- get the vehicle model (parent of seat)
+    local vehicle = seat.Parent
+    if not vehicle then return end
+
+    -- find primary part or just use seat
+    local root = vehicle.PrimaryPart or seat
+
+    local cam = workspace.CurrentCamera
+    local dir = Vector3.zero
+    local spd = MiscSettings.vehicleFlySpeed
+    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then spd = spd * 2 end
+    if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+    if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+    if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
+    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
+
+    if dir.Magnitude > 0 then
+        local move = dir.Unit * spd * dt
+        -- move whole vehicle model
+        if vehicle.PrimaryPart then
+            vehicle:SetPrimaryPartCFrame(CFrame.new(root.Position + move) * (cam.CFrame - cam.CFrame.Position))
         else
-            bodyVelocity.Velocity = Vector3.zero
+            root.CFrame = CFrame.new(root.Position + move) * (cam.CFrame - cam.CFrame.Position)
         end
-
-        bodyGyro.CFrame = cam.CFrame
-    end)
-end
-
-local function disableFly()
-    if flyConnection then
-        flyConnection:Disconnect()
-        flyConnection = nil
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
     end
-    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
-    if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
-
-    local char = localPlayer.Character
-    if char then
-        local hum = char:FindFirstChild("Humanoid")
-        if hum then hum.PlatformStand = false end
-    end
-end
+end)
 
 -- NOCLIP
 RunService.Stepped:Connect(function()
-    if MiscSettings.noclip then
-        local char = localPlayer.Character
-        if char then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
-            end
+    if not MiscSettings.noclip then return end
+    local char = lp.Character
+    if not char then return end
+    for _, part in pairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
         end
     end
 end)
 
--- RESPAWN FIX
-localPlayer.CharacterAdded:Connect(function()
-    if MiscSettings.flyEnabled then
+-- RESPAWN
+lp.CharacterAdded:Connect(function()
+    if MiscSettings.flyOn then
         task.wait(0.5)
-        enableFly()
+        MiscSettings.flyOn = true
     end
 end)
 
@@ -101,19 +160,47 @@ local Misc = Window:AddMenu({ Name = "Misc", Icon = "zap" })
 
 local MovSection = Misc:AddSection({ Name = "Movement", Position = "left" })
 
-MovSection:AddToggle({ Name = "Fly", Default = false, Callback = function(v)
-    MiscSettings.flyEnabled = v
-    if v then enableFly() else disableFly() end
+MovSection:AddToggle({ Name = "Speed Hack", Default = false, Callback = function(v)
+    MiscSettings.speedOn = v
+    if v then
+        enableAutoSprint()
+    else
+        disableAutoSprint()
+        local char = lp.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hum then hum.PlatformStand = false end
+            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end
 end })
 
-MovSection:AddSlider({ Name = "Fly Speed", Default = 50, Min = 10, Max = 500, Round = 0, Callback = function(v)
+MovSection:AddSlider({ Name = "Speed", Default = 25, Min = 1, Max = 27, Round = 0, Callback = function(v)
+    MiscSettings.speed = v
+end })
+
+MovSection:AddToggle({ Name = "Fly", Default = false, Callback = function(v)
+    MiscSettings.flyOn = v
+    if not v then
+        local char = lp.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hum then hum.PlatformStand = false end
+            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end
+end })
+
+MovSection:AddSlider({ Name = "Fly Speed", Default = 50, Min = 10, Max = 300, Round = 0, Callback = function(v)
     MiscSettings.flySpeed = v
 end })
 
 MovSection:AddToggle({ Name = "Noclip", Default = false, Callback = function(v)
     MiscSettings.noclip = v
     if not v then
-        local char = localPlayer.Character
+        local char = lp.Character
         if char then
             for _, part in pairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then
@@ -122,4 +209,30 @@ MovSection:AddToggle({ Name = "Noclip", Default = false, Callback = function(v)
             end
         end
     end
+end })
+
+local VehicleSection = Misc:AddSection({ Name = "Vehicle", Position = "center" })
+
+VehicleSection:AddToggle({ Name = "Vehicle Fly", Default = false, Callback = function(v)
+    MiscSettings.vehicleFlyOn = v
+end })
+
+VehicleSection:AddSlider({ Name = "Vehicle Fly Speed", Default = 80, Min = 10, Max = 500, Round = 0, Callback = function(v)
+    MiscSettings.vehicleFlySpeed = v
+end })
+
+local UtilSection = Misc:AddSection({ Name = "Utility", Position = "right" })
+
+UtilSection:AddButton({ Name = "Copy HWID", Callback = function()
+    setclipboard(getgenv()._AUTH_HWID)
+    Window.Notifier:Notify({ Title = "HWID Copied", Content = getgenv()._AUTH_HWID, Icon = "clipboard", Duration = 3 })
+end })
+
+UtilSection:AddButton({ Name = "Rejoin", Callback = function()
+    game:GetService("TeleportService"):Teleport(game.PlaceId, lp)
+end })
+
+UtilSection:AddButton({ Name = "Discord", Callback = function()
+    setclipboard("https://discord.gg/YOURLINK")
+    Window.Notifier:Notify({ Title = "Discord", Content = "Link copied.", Icon = "link", Duration = 3 })
 end })
