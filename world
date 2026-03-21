@@ -41,8 +41,16 @@ RunService.RenderStepped:Connect(function()
         if char then
             for _, part in pairs(char:GetDescendants()) do
                 if part:IsA("BasePart") then
+                    if part.Name == "HumanoidRootPart" then continue end
                     part.Color = WorldSettings.selfChamColor
                     part.Transparency = 0.3
+                    part.Material = Enum.Material.ForceField
+                end
+                if part:IsA("Shirt") or part:IsA("Pants") or part:IsA("ShirtGraphic") then
+                    part:Destroy()
+                end
+                if part:IsA("Accessory") then
+                    part:Destroy()
                 end
             end
         end
