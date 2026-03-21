@@ -54,8 +54,3 @@ Window.Notifier:Notify({
     Icon = "check-circle",
     Duration = 5,
 })
-local Window = Fatality.new({
-    Name = "MDMA",
-    Keybind = "Insert",
-    Expire = expiry,
-})
