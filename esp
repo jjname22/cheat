@@ -22,12 +22,17 @@ local ESPSettings = getgenv()._MDMA_ESP or {
     equipmentBoxes = true,
     equipmentNames = true,
     equipmentColor = Color3.fromRGB(50, 150, 255),
+    corpseEnabled = false,
+    corpseBoxes = true,
+    corpseNames = true,
+    corpseColor = Color3.fromRGB(150, 0, 255),
 }
 getgenv()._MDMA_ESP = ESPSettings
 
 local playerESP = {}
 local vehicleBoxCache = {}
 local equipmentBoxes = {}
+local corpseBoxes = {}
 
 local function worldToScreen(pos)
     local cam = workspace.CurrentCamera
@@ -245,6 +250,40 @@ RunService.RenderStepped:Connect(function()
     else
         for _, d in pairs(equipmentBoxes) do d.box.Visible = false d.label.Visible = false end
     end
+
+    -- CORPSE ESP
+    local corpses = workspace:FindFirstChild("Corpses")
+    if ESPSettings.corpseEnabled and corpses then
+        for _, v in pairs(corpses:GetChildren()) do
+            if not corpseBoxes[v] then
+                corpseBoxes[v] = {
+                    box = newDrawing("Square", {Visible=false, Color=ESPSettings.corpseColor, Thickness=1, Filled=false}),
+                    label = newDrawing("Text", {Visible=false, Color=ESPSettings.corpseColor, Size=13, Center=true, Outline=true}),
+                }
+            end
+            local onScreen, minX, minY, maxX, maxY = getBoxFromBounding(v)
+            local d = corpseBoxes[v]
+            if onScreen then
+                if ESPSettings.corpseBoxes then
+                    d.box.Position = Vector2.new(minX, minY)
+                    d.box.Size = Vector2.new(maxX-minX, maxY-minY)
+                    d.box.Color = ESPSettings.corpseColor
+                    d.box.Visible = true
+                else d.box.Visible = false end
+                if ESPSettings.corpseNames then
+                    d.label.Position = Vector2.new((minX+maxX)/2, minY-16)
+                    d.label.Text = v.Name
+                    d.label.Color = ESPSettings.corpseColor
+                    d.label.Visible = true
+                else d.label.Visible = false end
+            else
+                d.box.Visible = false
+                d.label.Visible = false
+            end
+        end
+    else
+        for _, d in pairs(corpseBoxes) do d.box.Visible = false d.label.Visible = false end
+    end
 end)
 
 -- UI
@@ -273,3 +312,9 @@ EquipSection:AddToggle({ Name = "Equipment ESP", Default = false, Callback = fun
 EquipSection:AddToggle({ Name = "Equipment Boxes", Default = true, Callback = function(v) ESPSettings.equipmentBoxes = v end })
 EquipSection:AddToggle({ Name = "Equipment Names", Default = true, Callback = function(v) ESPSettings.equipmentNames = v end })
 EquipSection:AddColorPicker({ Name = "Equipment Color", Default = Color3.fromRGB(50,150,255), Callback = function(c) ESPSettings.equipmentColor = c end })
+
+local CorpseSection = Visuals:AddSection({ Name = "Corpses", Position = "left" })
+CorpseSection:AddToggle({ Name = "Corpse ESP", Default = false, Callback = function(v) ESPSettings.corpseEnabled = v end })
+CorpseSection:AddToggle({ Name = "Corpse Boxes", Default = true, Callback = function(v) ESPSettings.corpseBoxes = v end })
+CorpseSection:AddToggle({ Name = "Corpse Names", Default = true, Callback = function(v) ESPSettings.corpseNames = v end })
+CorpseSection:AddColorPicker({ Name = "Corpse Color", Default = Color3.fromRGB(150,0,255), Callback = function(c) ESPSettings.corpseColor = c end })
