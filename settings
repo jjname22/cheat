@@ -1,14 +1,31 @@
 local Window = getgenv()._MDMA_WINDOW
 local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 local localPlayer = Players.LocalPlayer
+
+local currentKeybind = Enum.KeyCode.RightShift
+
+-- listen for keybind and toggle window
+UIS.InputBegan:Connect(function(input, typing)
+    if typing then return end
+    if input.KeyCode == currentKeybind then
+        Window:SetVisible(not Window.Toggle)
+    end
+end)
 
 local Settings = Window:AddMenu({ Name = "Settings", Icon = "settings" })
 
 local UISection = Settings:AddSection({ Name = "Interface", Position = "left" })
 
 UISection:AddKeybind({ Name = "Toggle Menu", Default = Enum.KeyCode.RightShift, Callback = function(k)
-    -- actually update the window keybind when changed
-    Window.Keybind = typeof(k) == "string" and Enum.KeyCode[k] or k
+    -- update keybind when user selects new one
+    local ok, key = pcall(function()
+        return typeof(k) == "string" and Enum.KeyCode[k] or k
+    end)
+    if ok and key then
+        currentKeybind = key
+        print("menu keybind set to: " .. tostring(key))
+    end
 end })
 
 local MiscSection = Settings:AddSection({ Name = "Misc", Position = "center" })
