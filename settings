@@ -1,0 +1,21 @@
+local Window = getgenv()._MDMA_WINDOW
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+
+local Settings = Window:AddMenu({ Name = "Settings", Icon = "settings" })
+
+local UISection = Settings:AddSection({ Name = "Interface", Position = "left" })
+UISection:AddKeybind({ Name = "Toggle Menu", Default = Enum.KeyCode.RightShift, Callback = function(k) print("Key:", k) end })
+
+local MiscSection = Settings:AddSection({ Name = "Misc", Position = "center" })
+MiscSection:AddButton({ Name = "Copy HWID", Callback = function()
+    setclipboard(getgenv()._AUTH_HWID)
+    Window.Notifier:Notify({ Title = "HWID Copied", Content = getgenv()._AUTH_HWID, Icon = "clipboard", Duration = 3 })
+end })
+MiscSection:AddButton({ Name = "Discord", Callback = function()
+    setclipboard("https://discord.gg/YOURLINK")
+    Window.Notifier:Notify({ Title = "Discord", Content = "Link copied.", Icon = "link", Duration = 3 })
+end })
+MiscSection:AddButton({ Name = "Rejoin", Callback = function()
+    game:GetService("TeleportService"):Teleport(game.PlaceId, localPlayer)
+end })
