@@ -1,1 +1,125 @@
 
+local Window = getgenv()._MDMA_WINDOW
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local localPlayer = Players.LocalPlayer
+
+local MiscSettings = {
+    flyEnabled = false,
+    flySpeed = 50,
+    noclip = false,
+}
+
+local flyConnection = nil
+local bodyVelocity = nil
+local bodyGyro = nil
+
+local function enableFly()
+    local char = localPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChild("Humanoid")
+    if not hrp or not hum then return end
+
+    hum.PlatformStand = true
+
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.Velocity = Vector3.zero
+    bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+    bodyVelocity.Parent = hrp
+
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e6, 1e6, 1e6)
+    bodyGyro.D = 50
+    bodyGyro.P = 1000
+    bodyGyro.CFrame = hrp.CFrame
+    bodyGyro.Parent = hrp
+
+    flyConnection = RunService.RenderStepped:Connect(function()
+        if not MiscSettings.flyEnabled then return end
+        local cam = workspace.CurrentCamera
+        local dir = Vector3.zero
+        local speed = MiscSettings.flySpeed
+
+        if UIS:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+        if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+
+        if dir.Magnitude > 0 then
+            bodyVelocity.Velocity = dir.Unit * speed
+        else
+            bodyVelocity.Velocity = Vector3.zero
+        end
+
+        bodyGyro.CFrame = cam.CFrame
+    end)
+end
+
+local function disableFly()
+    if flyConnection then
+        flyConnection:Disconnect()
+        flyConnection = nil
+    end
+    if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+    if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
+
+    local char = localPlayer.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.PlatformStand = false end
+    end
+end
+
+-- NOCLIP
+RunService.Stepped:Connect(function()
+    if MiscSettings.noclip then
+        local char = localPlayer.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- RESPAWN FIX
+localPlayer.CharacterAdded:Connect(function()
+    if MiscSettings.flyEnabled then
+        task.wait(0.5)
+        enableFly()
+    end
+end)
+
+-- UI
+local Misc = Window:AddMenu({ Name = "Misc", Icon = "zap" })
+
+local MovSection = Misc:AddSection({ Name = "Movement", Position = "left" })
+
+MovSection:AddToggle({ Name = "Fly", Default = false, Callback = function(v)
+    MiscSettings.flyEnabled = v
+    if v then enableFly() else disableFly() end
+end })
+
+MovSection:AddSlider({ Name = "Fly Speed", Default = 50, Min = 10, Max = 500, Round = 0, Callback = function(v)
+    MiscSettings.flySpeed = v
+end })
+
+MovSection:AddToggle({ Name = "Noclip", Default = false, Callback = function(v)
+    MiscSettings.noclip = v
+    if not v then
+        local char = localPlayer.Character
+        if char then
+            for _, part in pairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end
+end })
