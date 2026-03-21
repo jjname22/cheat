@@ -1,0 +1,87 @@
+local Window = getgenv()._MDMA_WINDOW
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local localPlayer = Players.LocalPlayer
+
+local AimbotSettings = {
+    enabled = false,
+    fov = 100,
+    smoothness = 0.1,
+    teamCheck = true,
+    showFOV = true,
+    fovColor = Color3.fromRGB(255, 255, 255),
+    hitpart = "Head",
+}
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.NumSides = 64
+
+local function worldToScreen(pos)
+    local cam = workspace.CurrentCamera
+    local sp, onScreen = cam:WorldToViewportPoint(pos)
+    return Vector2.new(sp.X, sp.Y), onScreen, sp.Z
+end
+
+local function getClosestPlayer()
+    local cam = workspace.CurrentCamera
+    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
+    local closest = nil
+    local closestDist = AimbotSettings.fov
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == localPlayer then continue end
+        if AimbotSettings.teamCheck and player.Team == localPlayer.Team then continue end
+        local char = player.Character
+        if not char then continue end
+        local hum = char:FindFirstChild("Humanoid")
+        if not hum or hum.Health <= 0 then continue end
+        local part = char:FindFirstChild(AimbotSettings.hitpart)
+        if not part then continue end
+        local sp, onScreen = worldToScreen(part.Position)
+        if not onScreen then continue end
+        local dist = (sp - center).Magnitude
+        if dist < closestDist then
+            closestDist = dist
+            closest = part
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    local cam = workspace.CurrentCamera
+
+    if AimbotSettings.showFOV and AimbotSettings.enabled then
+        fovCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+        fovCircle.Radius = AimbotSettings.fov
+        fovCircle.Color = AimbotSettings.fovColor
+        fovCircle.Visible = true
+    else
+        fovCircle.Visible = false
+    end
+
+    if AimbotSettings.enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local target = getClosestPlayer()
+        if target then
+            local sp = worldToScreen(target.Position)
+            local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+            local delta = sp - center
+            mousemoverel(delta.X * AimbotSettings.smoothness, delta.Y * AimbotSettings.smoothness)
+        end
+    end
+end)
+
+local Aimbot = Window:AddMenu({ Name = "Aimbot", Icon = "crosshair" })
+local AimbotSection = Aimbot:AddSection({ Name = "Settings", Position = "left" })
+AimbotSection:AddToggle({ Name = "Enable Aimbot", Default = false, Callback = function(v) AimbotSettings.enabled = v end })
+AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v) AimbotSettings.showFOV = v end })
+AimbotSection:AddToggle({ Name = "Team Check", Default = true, Callback = function(v) AimbotSettings.teamCheck = v end })
+AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.fov = v end })
+AimbotSection:AddSlider({ Name = "Smoothness", Default = 10, Min = 1, Max = 100, Round = 0, Callback = function(v) AimbotSettings.smoothness = v / 100 end })
+AimbotSection:AddDropdown({ Name = "Hit Part", Default = "Head", Values = {"Head", "HumanoidRootPart", "Torso"}, Callback = function(v) AimbotSettings.hitpart = v end })
+AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c) AimbotSettings.fovColor = c end })
