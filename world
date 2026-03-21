@@ -8,18 +8,56 @@ local WorldSettings = {
     fullbright = false,
     nofog = false,
     timeOfDay = 14,
+    brightness = 10,
+    ambient = Color3.fromRGB(255, 255, 255),
     selfChams = false,
     selfChamColor = Color3.fromRGB(0, 200, 255),
+    lowTxt = false,
 }
+
+-- LOW TEXTURE TARGETS
+local lowTxtClasses = {
+    "Tree", "Leaves", "Bush", "Grass", "Shrub", "Plant", "Foliage"
+}
+
+local function applyLowTxt()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        for _, name in pairs(lowTxtClasses) do
+            if obj.Name:lower():find(name:lower()) and obj:IsA("BasePart") then
+                obj.Transparency = 1
+            end
+        end
+        if obj:IsA("Decal") or obj:IsA("Texture") or obj:IsA("SpecialMesh") then
+            if obj.Parent and obj.Parent:IsA("BasePart") then
+                local p = obj.Parent
+                if p.Name:lower():find("tree") or p.Name:lower():find("bush") or
+                   p.Name:lower():find("grass") or p.Name:lower():find("leave") or
+                   p.Name:lower():find("foliage") or p.Name:lower():find("plant") then
+                    p.Transparency = 1
+                end
+            end
+        end
+    end
+end
+
+local function removeLowTxt()
+    for _, obj in pairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Transparency == 1 then
+            obj.Transparency = 0
+        end
+    end
+end
 
 task.spawn(function()
     while true do
         task.wait()
         if WorldSettings.fullbright then
-            Lighting.Brightness = 10
-            Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-            Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+            Lighting.Brightness = WorldSettings.brightness
+            Lighting.Ambient = WorldSettings.ambient
+            Lighting.OutdoorAmbient = WorldSettings.ambient
             Lighting.ClockTime = WorldSettings.timeOfDay
+            Lighting.FogEnd = WorldSettings.nofog and 1e6 or Lighting.FogEnd
+            Lighting.FogStart = WorldSettings.nofog and 1e6 or Lighting.FogStart
             for _, v in pairs(Lighting:GetDescendants()) do
                 if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or
                    v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") or
@@ -28,7 +66,7 @@ task.spawn(function()
                 end
             end
         end
-        if WorldSettings.nofog then
+        if WorldSettings.nofog and not WorldSettings.fullbright then
             Lighting.FogEnd = 1e6
             Lighting.FogStart = 1e6
         end
@@ -58,11 +96,50 @@ RunService.RenderStepped:Connect(function()
 end)
 
 local World = Window:AddMenu({ Name = "World", Icon = "sun" })
+
 local LightSection = World:AddSection({ Name = "Lighting", Position = "left" })
-LightSection:AddToggle({ Name = "Fullbright", Default = false, Callback = function(v) WorldSettings.fullbright = v end })
-LightSection:AddToggle({ Name = "No Fog", Default = false, Callback = function(v) WorldSettings.nofog = v end })
-LightSection:AddSlider({ Name = "Time of Day", Default = 14, Min = 0, Max = 24, Round = 0, Callback = function(v) WorldSettings.timeOfDay = v end })
+
+LightSection:AddToggle({ Name = "Fullbright", Default = false, Callback = function(v)
+    WorldSettings.fullbright = v
+end })
+
+LightSection:AddToggle({ Name = "No Fog", Default = false, Callback = function(v)
+    WorldSettings.nofog = v
+end })
+
+LightSection:AddToggle({ Name = "Low Textures", Default = false, Callback = function(v)
+    WorldSettings.lowTxt = v
+    if v then applyLowTxt() else removeLowTxt() end
+end })
+
+LightSection:AddSlider({ Name = "Brightness", Default = 10, Min = 1, Max = 20, Round = 0, Callback = function(v)
+    WorldSettings.brightness = v
+    if not WorldSettings.fullbright then
+        Lighting.Brightness = v
+    end
+end })
+
+LightSection:AddSlider({ Name = "Time of Day", Default = 14, Min = 0, Max = 24, Round = 0, Callback = function(v)
+    WorldSettings.timeOfDay = v
+    if not WorldSettings.fullbright then
+        Lighting.ClockTime = v
+    end
+end })
+
+LightSection:AddColorPicker({ Name = "Ambient", Default = Color3.fromRGB(255,255,255), Callback = function(c)
+    WorldSettings.ambient = c
+    if not WorldSettings.fullbright then
+        Lighting.Ambient = c
+        Lighting.OutdoorAmbient = c
+    end
+end })
 
 local CharSection = World:AddSection({ Name = "Character", Position = "center" })
-CharSection:AddToggle({ Name = "Self Chams", Default = false, Callback = function(v) WorldSettings.selfChams = v end })
-CharSection:AddColorPicker({ Name = "Self Cham Color", Default = Color3.fromRGB(0,200,255), Callback = function(c) WorldSettings.selfChamColor = c end })
+
+CharSection:AddToggle({ Name = "Self Chams", Default = false, Callback = function(v)
+    WorldSettings.selfChams = v
+end })
+
+CharSection:AddColorPicker({ Name = "Self Cham Color", Default = Color3.fromRGB(0,200,255), Callback = function(c)
+    WorldSettings.selfChamColor = c
+end })
