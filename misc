@@ -16,7 +16,6 @@ local MiscSettings = {
     vehicleFlySpeed = 80,
 }
 
--- SPRINT HELPERS
 local function sendKey(key, down)
     pcall(function()
         VIM:SendKeyEvent(down, key, false, game)
@@ -92,7 +91,6 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- VEHICLE FLY
--- finds whatever vehicle the player is sitting in and moves it
 RunService.Heartbeat:Connect(function(dt)
     if not MiscSettings.vehicleFlyOn then return end
     local char = lp.Character
@@ -100,17 +98,28 @@ RunService.Heartbeat:Connect(function(dt)
     local hum = char:FindFirstChild("Humanoid")
     if not hum then return end
 
-    -- find seat the player is in
     local seat = hum.SeatPart
-    if not seat then return end
+    if not seat then
+        -- not in a vehicle, try to find nearby vehicle in workspace
+        local vehicles = workspace:FindFirstChild("Vehicles")
+        if not vehicles then return end
+        for _, v in pairs(vehicles:GetChildren()) do
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp and (v:GetBoundingBox() ~= nil) then
+                local cf, size = v:GetBoundingBox()
+                if cf and (hrp.Position - cf.Position).Magnitude < 10 then
+                    seat = v:FindFirstChildWhichIsA("Seat") or v:FindFirstChildWhichIsA("VehicleSeat")
+                    break
+                end
+            end
+        end
+        if not seat then return end
+    end
 
-    -- get the vehicle model (parent of seat)
     local vehicle = seat.Parent
     if not vehicle then return end
 
-    -- find primary part or just use seat
     local root = vehicle.PrimaryPart or seat
-
     local cam = workspace.CurrentCamera
     local dir = Vector3.zero
     local spd = MiscSettings.vehicleFlySpeed
@@ -124,9 +133,10 @@ RunService.Heartbeat:Connect(function(dt)
 
     if dir.Magnitude > 0 then
         local move = dir.Unit * spd * dt
-        -- move whole vehicle model
         if vehicle.PrimaryPart then
-            vehicle:SetPrimaryPartCFrame(CFrame.new(root.Position + move) * (cam.CFrame - cam.CFrame.Position))
+            vehicle:SetPrimaryPartCFrame(
+                CFrame.new(root.Position + move) * (cam.CFrame - cam.CFrame.Position)
+            )
         else
             root.CFrame = CFrame.new(root.Position + move) * (cam.CFrame - cam.CFrame.Position)
         end
@@ -147,7 +157,6 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- RESPAWN
 lp.CharacterAdded:Connect(function()
     if MiscSettings.flyOn then
         task.wait(0.5)
@@ -176,9 +185,12 @@ MovSection:AddToggle({ Name = "Speed Hack", Default = false, Callback = function
     end
 end })
 
-MovSection:AddSlider({ Name = "Speed", Default = 25, Min = 1, Max = 27, Round = 0, Callback = function(v)
-    MiscSettings.speed = v
-end })
+MovSection:AddSlider({ Name = "Speed", Default = 10, Min = 1, Max = 19, Round = 1, Type = "x0.5",
+    Callback = function(v)
+        -- convert slider value to .5 intervals
+        MiscSettings.speed = v * 0.5 + 16
+    end
+})
 
 MovSection:AddToggle({ Name = "Fly", Default = false, Callback = function(v)
     MiscSettings.flyOn = v
@@ -217,7 +229,7 @@ VehicleSection:AddToggle({ Name = "Vehicle Fly", Default = false, Callback = fun
     MiscSettings.vehicleFlyOn = v
 end })
 
-VehicleSection:AddSlider({ Name = "Vehicle Fly Speed", Default = 80, Min = 10, Max = 500, Round = 0, Callback = function(v)
+VehicleSection:AddSlider({ Name = "Vehicle Speed", Default = 80, Min = 10, Max = 500, Round = 0, Callback = function(v)
     MiscSettings.vehicleFlySpeed = v
 end })
 
