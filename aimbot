@@ -14,21 +14,26 @@ local AimbotSettings = {
     hitpart = "Head",
     snapEnabled = true,
     snapFov = 150,
+    snapColor = Color3.fromRGB(255, 50, 50),
 }
 
 local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = false
+fovCircle.Visible = true
 fovCircle.Color = Color3.fromRGB(255, 255, 255)
 fovCircle.Thickness = 1
 fovCircle.Filled = false
 fovCircle.NumSides = 64
+fovCircle.Radius = 100
+fovCircle.Position = Vector2.new(0, 0)
 
 local snapCircle = Drawing.new("Circle")
-snapCircle.Visible = false
+snapCircle.Visible = true
 snapCircle.Color = Color3.fromRGB(255, 50, 50)
 snapCircle.Thickness = 1
 snapCircle.Filled = false
 snapCircle.NumSides = 64
+snapCircle.Radius = 150
+snapCircle.Position = Vector2.new(0, 0)
 
 local function worldToScreen(pos)
     local cam = workspace.CurrentCamera
@@ -64,38 +69,32 @@ end
 
 RunService.RenderStepped:Connect(function()
     local cam = workspace.CurrentCamera
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 
-    -- AIMBOT FOV
-    if AimbotSettings.showFOV and AimbotSettings.enabled then
-        fovCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-        fovCircle.Radius = AimbotSettings.fov
-        fovCircle.Color = AimbotSettings.fovColor
-        fovCircle.Visible = true
-    else
-        fovCircle.Visible = false
-    end
+    -- FOV CIRCLES always update position
+    fovCircle.Position = center
+    snapCircle.Position = center
 
-    -- SNAP FOV
-    if AimbotSettings.snapEnabled then
-        snapCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-        snapCircle.Radius = AimbotSettings.snapFov
-        snapCircle.Visible = true
-    else
-        snapCircle.Visible = false
-    end
+    -- show/hide based on settings
+    fovCircle.Visible = AimbotSettings.showFOV
+    fovCircle.Radius = AimbotSettings.fov
+    fovCircle.Color = AimbotSettings.fovColor
+
+    snapCircle.Visible = AimbotSettings.snapEnabled
+    snapCircle.Radius = AimbotSettings.snapFov
+    snapCircle.Color = AimbotSettings.snapColor
 
     -- AIMBOT
     if AimbotSettings.enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local target = getClosest(AimbotSettings.fov)
         if target then
             local sp = worldToScreen(target.Position)
-            local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
             local delta = sp - center
             mousemoverel(delta.X * AimbotSettings.smoothness, delta.Y * AimbotSettings.smoothness)
         end
     end
 
-    -- SNAP AIM on LMB
+    -- SNAP AIM
     if AimbotSettings.snapEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
         local target = getClosest(AimbotSettings.snapFov, "Head")
         if target then
@@ -109,17 +108,32 @@ local Aimbot = Window:AddMenu({ Name = "Aimbot", Icon = "crosshair" })
 
 local AimbotSection = Aimbot:AddSection({ Name = "Aimbot", Position = "left" })
 AimbotSection:AddToggle({ Name = "Enable Aimbot", Default = false, Callback = function(v) AimbotSettings.enabled = v end })
-AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v) AimbotSettings.showFOV = v end })
+AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v)
+    AimbotSettings.showFOV = v
+    fovCircle.Visible = v
+end })
 AimbotSection:AddToggle({ Name = "Team Check", Default = true, Callback = function(v) AimbotSettings.teamCheck = v end })
-AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.fov = v end })
+AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v)
+    AimbotSettings.fov = v
+    fovCircle.Radius = v
+end })
 AimbotSection:AddSlider({ Name = "Smoothness", Default = 10, Min = 1, Max = 100, Round = 0, Callback = function(v) AimbotSettings.smoothness = v / 100 end })
 AimbotSection:AddDropdown({ Name = "Hit Part", Default = "Head", Values = {"Head", "HumanoidRootPart", "Torso"}, Callback = function(v) AimbotSettings.hitpart = v end })
-AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c) AimbotSettings.fovColor = c end })
+AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c)
+    AimbotSettings.fovColor = c
+    fovCircle.Color = c
+end })
 
 local SnapSection = Aimbot:AddSection({ Name = "Snap Aim", Position = "center" })
 SnapSection:AddToggle({ Name = "Enable Snap", Default = true, Callback = function(v)
     AimbotSettings.snapEnabled = v
     snapCircle.Visible = v
 end })
-SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.snapFov = v end })
-SnapSection:AddColorPicker({ Name = "Snap FOV Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) snapCircle.Color = c end })
+SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, Round = 0, Callback = function(v)
+    AimbotSettings.snapFov = v
+    snapCircle.Radius = v
+end })
+SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,50,50), Callback = function(c)
+    AimbotSettings.snapColor = c
+    snapCircle.Color = c
+end })
