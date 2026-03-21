@@ -45,6 +45,7 @@ getgenv()._MDMA_WINDOW = Window
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/esp"))()
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/aimbot"))()
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/world"))()
+loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/misc"))()
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/settings"))()
 
 Window.Notifier:Notify({
