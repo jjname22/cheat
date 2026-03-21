@@ -19,23 +19,19 @@ local AimbotSettings = {
     tracerColor = Color3.fromRGB(255, 50, 50),
 }
 
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = true
-fovCircle.Color = Color3.fromRGB(255, 255, 255)
-fovCircle.Thickness = 1
-fovCircle.Filled = false
-fovCircle.NumSides = 64
-fovCircle.Radius = 100
+local function makeCircle(color, radius)
+    local c = Drawing.new("Circle")
+    c.Visible = true
+    c.Color = color
+    c.Thickness = 1
+    c.Filled = false
+    c.NumSides = 64
+    c.Radius = radius
+    return c
+end
 
-local snapCircle = Drawing.new("Circle")
-snapCircle.Visible = true
-snapCircle.Color = Color3.fromRGB(255, 50, 50)
-snapCircle.Thickness = 1
-snapCircle.Filled = false
-snapCircle.NumSides = 64
-snapCircle.Radius = 150
-
--- TRACER LINES per player
+local fovCircle = makeCircle(Color3.fromRGB(255,255,255), 100)
+local snapCircle = makeCircle(Color3.fromRGB(255,50,50), 150)
 local tracerLines = {}
 
 local function worldToScreen(pos)
@@ -46,10 +42,8 @@ end
 
 local function getClosest(fovRange, hitpart)
     local cam = workspace.CurrentCamera
-    local center = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y / 2)
-    local closest = nil
-    local closestDist = fovRange
-
+    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local closest, closestDist = nil, fovRange
     for _, player in pairs(Players:GetPlayers()) do
         if player == localPlayer then continue end
         if AimbotSettings.teamCheck and player.Team == localPlayer.Team then continue end
@@ -62,10 +56,7 @@ local function getClosest(fovRange, hitpart)
         local sp, onScreen = worldToScreen(part.Position)
         if not onScreen then continue end
         local dist = (sp - center).Magnitude
-        if dist < closestDist then
-            closestDist = dist
-            closest = part
-        end
+        if dist < closestDist then closestDist = dist closest = part end
     end
     return closest
 end
@@ -74,20 +65,22 @@ local snapIn = false
 local snapTarget = nil
 local snapOrigCF = nil
 
+-- update circles every frame no matter what
 RunService.RenderStepped:Connect(function()
     local cam = workspace.CurrentCamera
     local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 
     fovCircle.Position = center
-    snapCircle.Position = center
-    fovCircle.Visible = AimbotSettings.showFOV
     fovCircle.Radius = AimbotSettings.fov
     fovCircle.Color = AimbotSettings.fovColor
-    snapCircle.Visible = AimbotSettings.snapEnabled
+    fovCircle.Visible = AimbotSettings.showFOV
+
+    snapCircle.Position = center
     snapCircle.Radius = AimbotSettings.snapFov
     snapCircle.Color = AimbotSettings.snapColor
+    snapCircle.Visible = AimbotSettings.snapEnabled
 
-    -- AIMBOT RMB
+    -- AIMBOT
     if AimbotSettings.enabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
         local target = getClosest(AimbotSettings.fov)
         if target then
@@ -97,11 +90,10 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- SNAP AIM LMB - snap to target then snap BACK
+    -- SNAP
     if AimbotSettings.snapEnabled then
         if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
             if not snapIn then
-                -- first frame of click - store current cam and snap to target
                 snapOrigCF = cam.CFrame
                 local target = getClosest(AimbotSettings.snapFov, "Head")
                 if target then
@@ -110,17 +102,13 @@ RunService.RenderStepped:Connect(function()
                     cam.CFrame = CFrame.new(cam.CFrame.Position, target.Position)
                 end
             else
-                -- hold - keep snapped
                 if snapTarget and snapTarget.Parent then
                     cam.CFrame = CFrame.new(cam.CFrame.Position, snapTarget.Position)
                 end
             end
         else
             if snapIn then
-                -- released - snap back to original camera
-                if snapOrigCF then
-                    cam.CFrame = snapOrigCF
-                end
+                if snapOrigCF then cam.CFrame = snapOrigCF end
                 snapIn = false
                 snapTarget = nil
                 snapOrigCF = nil
@@ -131,19 +119,17 @@ RunService.RenderStepped:Connect(function()
     -- TRACERS
     for _, player in pairs(Players:GetPlayers()) do
         if player == localPlayer then continue end
-
         if not tracerLines[player] then
-            tracerLines[player] = Drawing.new("Line")
-            tracerLines[player].Thickness = 1
-            tracerLines[player].Color = AimbotSettings.tracerColor
-            tracerLines[player].Visible = false
+            local line = Drawing.new("Line")
+            line.Thickness = 1
+            line.Color = AimbotSettings.tracerColor
+            line.Visible = false
+            tracerLines[player] = line
         end
-
         local line = tracerLines[player]
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local hum = char and char:FindFirstChild("Humanoid")
-
         if AimbotSettings.tracers and hrp and hum and hum.Health > 0 then
             local sp, onScreen = worldToScreen(hrp.Position)
             if onScreen then
@@ -160,7 +146,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- cleanup tracers when player leaves
 Players.PlayerRemoving:Connect(function(player)
     if tracerLines[player] then
         tracerLines[player]:Remove()
@@ -173,45 +158,18 @@ local Aimbot = Window:AddMenu({ Name = "Aimbot", Icon = "crosshair" })
 
 local AimbotSection = Aimbot:AddSection({ Name = "Aimbot", Position = "left" })
 AimbotSection:AddToggle({ Name = "Enable Aimbot", Default = false, Callback = function(v) AimbotSettings.enabled = v end })
-AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v)
-    AimbotSettings.showFOV = v
-    fovCircle.Visible = v
-end })
+AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v) AimbotSettings.showFOV = v end })
 AimbotSection:AddToggle({ Name = "Team Check", Default = true, Callback = function(v) AimbotSettings.teamCheck = v end })
-AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v)
-    AimbotSettings.fov = v
-    fovCircle.Radius = v
-end })
+AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.fov = v end })
 AimbotSection:AddSlider({ Name = "Smoothness", Default = 10, Min = 1, Max = 100, Round = 0, Callback = function(v) AimbotSettings.smoothness = v / 100 end })
 AimbotSection:AddDropdown({ Name = "Hit Part", Default = "Head", Values = {"Head", "HumanoidRootPart", "Torso"}, Callback = function(v) AimbotSettings.hitpart = v end })
-AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c)
-    AimbotSettings.fovColor = c
-    fovCircle.Color = c
-end })
+AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c) AimbotSettings.fovColor = c end })
 
 local SnapSection = Aimbot:AddSection({ Name = "Snap Aim", Position = "center" })
-SnapSection:AddToggle({ Name = "Enable Snap", Default = true, Callback = function(v)
-    AimbotSettings.snapEnabled = v
-    snapCircle.Visible = v
-end })
-SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, Round = 0, Callback = function(v)
-    AimbotSettings.snapFov = v
-    snapCircle.Radius = v
-end })
-SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,50,50), Callback = function(c)
-    AimbotSettings.snapColor = c
-    snapCircle.Color = c
-end })
+SnapSection:AddToggle({ Name = "Enable Snap", Default = true, Callback = function(v) AimbotSettings.snapEnabled = v end })
+SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.snapFov = v end })
+SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.snapColor = c end })
 
 local TracerSection = Aimbot:AddSection({ Name = "Tracers", Position = "right" })
-TracerSection:AddToggle({ Name = "Enable Tracers", Default = false, Callback = function(v)
-    AimbotSettings.tracers = v
-    if not v then
-        for _, line in pairs(tracerLines) do
-            line.Visible = false
-        end
-    end
-end })
-TracerSection:AddColorPicker({ Name = "Tracer Color", Default = Color3.fromRGB(255,50,50), Callback = function(c)
-    AimbotSettings.tracerColor = c
-end })
+TracerSection:AddToggle({ Name = "Enable Tracers", Default = false, Callback = function(v) AimbotSettings.tracers = v end })
+TracerSection:AddColorPicker({ Name = "Tracer Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerColor = c end })
