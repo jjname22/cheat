@@ -17,32 +17,46 @@ local AimbotSettings = {
     snapColor = Color3.fromRGB(255, 50, 50),
     tracers = false,
     tracerColor = Color3.fromRGB(255, 50, 50),
+    tracerChams = false,
+    tracerChamColor = Color3.fromRGB(255, 50, 50),
+    tracerDistance = false,
+    tracerHealth = false,
 }
 
-local function makeCircle(color, radius)
-    local c = Drawing.new("Circle")
-    c.Visible = true
-    c.Color = color
-    c.Thickness = 1
-    c.Filled = false
-    c.NumSides = 64
-    c.Radius = radius
-    return c
-end
+-- wait for camera to be ready
+task.wait(1)
 
-local fovCircle = makeCircle(Color3.fromRGB(255,255,255), 100)
-local snapCircle = makeCircle(Color3.fromRGB(255,50,50), 150)
+local cam = workspace.CurrentCamera
+local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+
+local fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.NumSides = 64
+fovCircle.Radius = 100
+fovCircle.Position = center
+fovCircle.Visible = true
+
+local snapCircle = Drawing.new("Circle")
+snapCircle.Color = Color3.fromRGB(255, 50, 50)
+snapCircle.Thickness = 1
+snapCircle.Filled = false
+snapCircle.NumSides = 64
+snapCircle.Radius = 150
+snapCircle.Position = center
+snapCircle.Visible = true
+
 local tracerLines = {}
+local tracerLabels = {}
 
 local function worldToScreen(pos)
-    local cam = workspace.CurrentCamera
     local sp, onScreen = cam:WorldToViewportPoint(pos)
     return Vector2.new(sp.X, sp.Y), onScreen, sp.Z
 end
 
 local function getClosest(fovRange, hitpart)
-    local cam = workspace.CurrentCamera
-    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
     local closest, closestDist = nil, fovRange
     for _, player in pairs(Players:GetPlayers()) do
         if player == localPlayer then continue end
@@ -55,7 +69,7 @@ local function getClosest(fovRange, hitpart)
         if not part then continue end
         local sp, onScreen = worldToScreen(part.Position)
         if not onScreen then continue end
-        local dist = (sp - center).Magnitude
+        local dist = (sp - screenCenter).Magnitude
         if dist < closestDist then closestDist = dist closest = part end
     end
     return closest
@@ -65,17 +79,16 @@ local snapIn = false
 local snapTarget = nil
 local snapOrigCF = nil
 
--- update circles every frame no matter what
 RunService.RenderStepped:Connect(function()
-    local cam = workspace.CurrentCamera
-    local center = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
+    local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 
-    fovCircle.Position = center
+    -- FOV CIRCLES always force visible
+    fovCircle.Position = screenCenter
     fovCircle.Radius = AimbotSettings.fov
     fovCircle.Color = AimbotSettings.fovColor
     fovCircle.Visible = AimbotSettings.showFOV
 
-    snapCircle.Position = center
+    snapCircle.Position = screenCenter
     snapCircle.Radius = AimbotSettings.snapFov
     snapCircle.Color = AimbotSettings.snapColor
     snapCircle.Visible = AimbotSettings.snapEnabled
@@ -85,7 +98,7 @@ RunService.RenderStepped:Connect(function()
         local target = getClosest(AimbotSettings.fov)
         if target then
             local sp = worldToScreen(target.Position)
-            local delta = sp - center
+            local delta = sp - screenCenter
             mousemoverel(delta.X * AimbotSettings.smoothness, delta.Y * AimbotSettings.smoothness)
         end
     end
@@ -116,41 +129,87 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- TRACERS
+    -- TRACERS + OPTIONS
     for _, player in pairs(Players:GetPlayers()) do
         if player == localPlayer then continue end
+
         if not tracerLines[player] then
             local line = Drawing.new("Line")
             line.Thickness = 1
-            line.Color = AimbotSettings.tracerColor
             line.Visible = false
             tracerLines[player] = line
+
+            local label = Drawing.new("Text")
+            label.Size = 13
+            label.Center = true
+            label.Outline = true
+            label.Visible = false
+            tracerLabels[player] = label
         end
+
         local line = tracerLines[player]
+        local label = tracerLabels[player]
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         local hum = char and char:FindFirstChild("Humanoid")
+
         if AimbotSettings.tracers and hrp and hum and hum.Health > 0 then
-            local sp, onScreen = worldToScreen(hrp.Position)
+            local sp, onScreen, dist = worldToScreen(hrp.Position)
+
             if onScreen then
                 line.From = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y)
                 line.To = sp
                 line.Color = AimbotSettings.tracerColor
                 line.Visible = true
+
+                -- tracer chams - forcefield material color overlay
+                if AimbotSettings.tracerChams then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            if part.Name == "HumanoidRootPart" then continue end
+                            part.Color = AimbotSettings.tracerChamColor
+                            part.Material = Enum.Material.ForceField
+                            part.Transparency = 0.3
+                        end
+                        if part:IsA("Accessory") or part:IsA("Shirt") or part:IsA("Pants") then
+                            pcall(function() part:Destroy() end)
+                        end
+                    end
+                end
+
+                -- label above tracer line
+                local labelParts = {}
+                if AimbotSettings.tracerDistance then
+                    table.insert(labelParts, math.floor(dist) .. "m")
+                end
+                if AimbotSettings.tracerHealth then
+                    local hp = math.floor(hum.Health)
+                    local maxhp = math.floor(hum.MaxHealth)
+                    table.insert(labelParts, hp .. "/" .. maxhp .. "hp")
+                end
+
+                if #labelParts > 0 then
+                    label.Text = table.concat(labelParts, " | ")
+                    label.Position = Vector2.new(sp.X, sp.Y - 20)
+                    label.Color = AimbotSettings.tracerColor
+                    label.Visible = true
+                else
+                    label.Visible = false
+                end
             else
                 line.Visible = false
+                label.Visible = false
             end
         else
             line.Visible = false
+            label.Visible = false
         end
     end
 end)
 
 Players.PlayerRemoving:Connect(function(player)
-    if tracerLines[player] then
-        tracerLines[player]:Remove()
-        tracerLines[player] = nil
-    end
+    if tracerLines[player] then tracerLines[player]:Remove() tracerLines[player] = nil end
+    if tracerLabels[player] then tracerLabels[player]:Remove() tracerLabels[player] = nil end
 end)
 
 -- UI
@@ -172,4 +231,8 @@ SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,5
 
 local TracerSection = Aimbot:AddSection({ Name = "Tracers", Position = "right" })
 TracerSection:AddToggle({ Name = "Enable Tracers", Default = false, Callback = function(v) AimbotSettings.tracers = v end })
+TracerSection:AddToggle({ Name = "Show Distance", Default = false, Callback = function(v) AimbotSettings.tracerDistance = v end })
+TracerSection:AddToggle({ Name = "Show Health", Default = false, Callback = function(v) AimbotSettings.tracerHealth = v end })
+TracerSection:AddToggle({ Name = "Chams", Default = false, Callback = function(v) AimbotSettings.tracerChams = v end })
 TracerSection:AddColorPicker({ Name = "Tracer Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerColor = c end })
+TracerSection:AddColorPicker({ Name = "Cham Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerChamColor = c end })
