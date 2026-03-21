@@ -1,0 +1,266 @@
+local Window = getgenv()._MDMA_WINDOW
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local localPlayer = Players.LocalPlayer
+
+local ESPSettings = getgenv()._MDMA_ESP or {
+    playerEnabled = false,
+    playerBoxes = true,
+    playerNames = true,
+    playerHealth = true,
+    playerChams = false,
+    playerBoxColor = Color3.fromRGB(255, 50, 50),
+    playerNameColor = Color3.fromRGB(255, 255, 255),
+    playerChamColor = Color3.fromRGB(255, 50, 50),
+    vehicleEnabled = false,
+    vehicleBoxes = true,
+    vehicleNames = true,
+    vehicleChams = false,
+    vehicleColor = Color3.fromRGB(255, 200, 0),
+    vehicleChamColor = Color3.fromRGB(255, 200, 0),
+    equipmentEnabled = false,
+    equipmentBoxes = true,
+    equipmentNames = true,
+    equipmentColor = Color3.fromRGB(50, 150, 255),
+}
+getgenv()._MDMA_ESP = ESPSettings
+
+local playerESP = {}
+local vehicleBoxCache = {}
+local equipmentBoxes = {}
+
+local function worldToScreen(pos)
+    local cam = workspace.CurrentCamera
+    local sp, onScreen = cam:WorldToViewportPoint(pos)
+    return Vector2.new(sp.X, sp.Y), onScreen, sp.Z
+end
+
+local function getBoundingBox(model)
+    local ok, cf, size = pcall(function() return model:GetBoundingBox() end)
+    if not ok then return nil, nil end
+    return cf, size
+end
+
+local function newDrawing(t, props)
+    local d = Drawing.new(t)
+    for k, v in pairs(props) do d[k] = v end
+    return d
+end
+
+local function getBoxFromBounding(model)
+    local cf, size = getBoundingBox(model)
+    if not cf or not size then return nil end
+    local corners = {
+        cf * CFrame.new(-size.X/2, -size.Y/2, 0),
+        cf * CFrame.new( size.X/2, -size.Y/2, 0),
+        cf * CFrame.new( size.X/2,  size.Y/2, 0),
+        cf * CFrame.new(-size.X/2,  size.Y/2, 0),
+    }
+    local minX, minY = math.huge, math.huge
+    local maxX, maxY = -math.huge, -math.huge
+    local onScreen = false
+    for _, c in pairs(corners) do
+        local sp, vis = worldToScreen(c.Position)
+        if vis then onScreen = true end
+        minX = math.min(minX, sp.X)
+        minY = math.min(minY, sp.Y)
+        maxX = math.max(maxX, sp.X)
+        maxY = math.max(maxY, sp.Y)
+    end
+    return onScreen, minX, minY, maxX, maxY
+end
+
+local function initPlayerESP(player)
+    if player == localPlayer then return end
+    playerESP[player] = {
+        box = newDrawing("Square", {Visible=false, Color=ESPSettings.playerBoxColor, Thickness=1, Filled=false}),
+        name = newDrawing("Text", {Visible=false, Color=ESPSettings.playerNameColor, Size=14, Center=true, Outline=true, Text=player.Name}),
+        health = newDrawing("Square", {Visible=false, Color=Color3.fromRGB(0,255,0), Thickness=1, Filled=true}),
+        healthBg = newDrawing("Square", {Visible=false, Color=Color3.fromRGB(30,30,30), Thickness=1, Filled=true}),
+    }
+end
+
+local function removePlayerESP(player)
+    if playerESP[player] then
+        for _, d in pairs(playerESP[player]) do if d.Remove then d:Remove() end end
+        playerESP[player] = nil
+    end
+end
+
+for _, p in pairs(Players:GetPlayers()) do initPlayerESP(p) end
+Players.PlayerAdded:Connect(initPlayerESP)
+Players.PlayerRemoving:Connect(removePlayerESP)
+
+RunService.RenderStepped:Connect(function()
+    -- PLAYER ESP
+    for player, drawings in pairs(playerESP) do
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChild("Humanoid")
+
+        if ESPSettings.playerEnabled and hrp and hum and hum.Health > 0 then
+            local head = char:FindFirstChild("Head")
+            local topPos = head and head.Position or hrp.Position + Vector3.new(0, 3, 0)
+            local botPos = hrp.Position - Vector3.new(0, 3, 0)
+            local topSP, topOn = worldToScreen(topPos)
+            local botSP, _ = worldToScreen(botPos)
+            local _, _, dist = worldToScreen(hrp.Position)
+
+            if topOn and dist > 0 then
+                local boxH = math.abs(topSP.Y - botSP.Y)
+                local boxW = boxH * 0.6
+                local boxX = topSP.X - boxW / 2
+                local boxY = topSP.Y
+
+                if ESPSettings.playerBoxes then
+                    drawings.box.Position = Vector2.new(boxX, boxY)
+                    drawings.box.Size = Vector2.new(boxW, boxH)
+                    drawings.box.Color = ESPSettings.playerBoxColor
+                    drawings.box.Visible = true
+                else drawings.box.Visible = false end
+
+                if ESPSettings.playerNames then
+                    drawings.name.Position = Vector2.new(topSP.X, boxY - 16)
+                    drawings.name.Text = player.Name .. " [" .. math.floor(dist) .. "m]"
+                    drawings.name.Color = ESPSettings.playerNameColor
+                    drawings.name.Visible = true
+                else drawings.name.Visible = false end
+
+                if ESPSettings.playerHealth then
+                    local hp = hum.Health / hum.MaxHealth
+                    drawings.healthBg.Position = Vector2.new(boxX - 6, boxY)
+                    drawings.healthBg.Size = Vector2.new(3, boxH)
+                    drawings.healthBg.Visible = true
+                    drawings.health.Position = Vector2.new(boxX - 6, boxY + boxH * (1 - hp))
+                    drawings.health.Size = Vector2.new(3, boxH * hp)
+                    drawings.health.Color = Color3.fromRGB(math.floor(255*(1-hp)), math.floor(255*hp), 0)
+                    drawings.health.Visible = true
+                else
+                    drawings.health.Visible = false
+                    drawings.healthBg.Visible = false
+                end
+
+                if ESPSettings.playerChams then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.Color = ESPSettings.playerChamColor
+                            part.Transparency = 0.3
+                        end
+                    end
+                end
+            else
+                for _, d in pairs(drawings) do d.Visible = false end
+            end
+        else
+            for _, d in pairs(drawings) do d.Visible = false end
+        end
+    end
+
+    -- VEHICLE ESP
+    local vehicles = workspace:FindFirstChild("Vehicles")
+    if ESPSettings.vehicleEnabled and vehicles then
+        for _, v in pairs(vehicles:GetChildren()) do
+            if not vehicleBoxCache[v] then
+                vehicleBoxCache[v] = {
+                    box = newDrawing("Square", {Visible=false, Color=ESPSettings.vehicleColor, Thickness=1, Filled=false}),
+                    label = newDrawing("Text", {Visible=false, Color=ESPSettings.vehicleColor, Size=13, Center=true, Outline=true}),
+                }
+            end
+            local onScreen, minX, minY, maxX, maxY = getBoxFromBounding(v)
+            local d = vehicleBoxCache[v]
+            if onScreen then
+                if ESPSettings.vehicleBoxes then
+                    d.box.Position = Vector2.new(minX, minY)
+                    d.box.Size = Vector2.new(maxX-minX, maxY-minY)
+                    d.box.Color = ESPSettings.vehicleColor
+                    d.box.Visible = true
+                else d.box.Visible = false end
+                if ESPSettings.vehicleNames then
+                    d.label.Position = Vector2.new((minX+maxX)/2, minY-16)
+                    d.label.Text = v.Name
+                    d.label.Color = ESPSettings.vehicleColor
+                    d.label.Visible = true
+                else d.label.Visible = false end
+                if ESPSettings.vehicleChams then
+                    for _, part in pairs(v:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.Color = ESPSettings.vehicleChamColor
+                            part.Transparency = 0.3
+                        end
+                    end
+                end
+            else
+                d.box.Visible = false
+                d.label.Visible = false
+            end
+        end
+    else
+        for _, d in pairs(vehicleBoxCache) do d.box.Visible = false d.label.Visible = false end
+    end
+
+    -- EQUIPMENT ESP
+    local characters = workspace:FindFirstChild("Characters")
+    if ESPSettings.equipmentEnabled and characters then
+        for _, charFolder in pairs(characters:GetChildren()) do
+            local equipment = charFolder:FindFirstChild("Equipment")
+            if equipment then
+                for _, v in pairs(equipment:GetChildren()) do
+                    if not equipmentBoxes[v] then
+                        equipmentBoxes[v] = {
+                            box = newDrawing("Square", {Visible=false, Color=ESPSettings.equipmentColor, Thickness=1, Filled=false}),
+                            label = newDrawing("Text", {Visible=false, Color=ESPSettings.equipmentColor, Size=13, Center=true, Outline=true}),
+                        }
+                    end
+                    local onScreen, minX, minY, maxX, maxY = getBoxFromBounding(v)
+                    local d = equipmentBoxes[v]
+                    if onScreen then
+                        if ESPSettings.equipmentBoxes then
+                            d.box.Position = Vector2.new(minX, minY)
+                            d.box.Size = Vector2.new(maxX-minX, maxY-minY)
+                            d.box.Color = ESPSettings.equipmentColor
+                            d.box.Visible = true
+                        else d.box.Visible = false end
+                        if ESPSettings.equipmentNames then
+                            d.label.Position = Vector2.new((minX+maxX)/2, minY-16)
+                            d.label.Text = v.Name
+                            d.label.Color = ESPSettings.equipmentColor
+                            d.label.Visible = true
+                        else d.label.Visible = false end
+                    else
+                        d.box.Visible = false
+                        d.label.Visible = false
+                    end
+                end
+            end
+        end
+    else
+        for _, d in pairs(equipmentBoxes) do d.box.Visible = false d.label.Visible = false end
+    end
+end)
+
+-- UI
+local Visuals = Window:AddMenu({ Name = "Visuals", Icon = "eye" })
+
+local PlayerSection = Visuals:AddSection({ Name = "Players", Position = "left" })
+PlayerSection:AddToggle({ Name = "Player ESP", Default = false, Callback = function(v) ESPSettings.playerEnabled = v end })
+PlayerSection:AddToggle({ Name = "Boxes", Default = true, Callback = function(v) ESPSettings.playerBoxes = v end })
+PlayerSection:AddToggle({ Name = "Names", Default = true, Callback = function(v) ESPSettings.playerNames = v end })
+PlayerSection:AddToggle({ Name = "Health Bar", Default = true, Callback = function(v) ESPSettings.playerHealth = v end })
+PlayerSection:AddToggle({ Name = "Chams", Default = false, Callback = function(v) ESPSettings.playerChams = v end })
+PlayerSection:AddColorPicker({ Name = "Box Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) ESPSettings.playerBoxColor = c end })
+PlayerSection:AddColorPicker({ Name = "Name Color", Default = Color3.fromRGB(255,255,255), Callback = function(c) ESPSettings.playerNameColor = c end })
+PlayerSection:AddColorPicker({ Name = "Cham Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) ESPSettings.playerChamColor = c end })
+
+local VehicleSection = Visuals:AddSection({ Name = "Vehicles", Position = "center" })
+VehicleSection:AddToggle({ Name = "Vehicle ESP", Default = false, Callback = function(v) ESPSettings.vehicleEnabled = v end })
+VehicleSection:AddToggle({ Name = "Vehicle Boxes", Default = true, Callback = function(v) ESPSettings.vehicleBoxes = v end })
+VehicleSection:AddToggle({ Name = "Vehicle Names", Default = true, Callback = function(v) ESPSettings.vehicleNames = v end })
+VehicleSection:AddToggle({ Name = "Vehicle Chams", Default = false, Callback = function(v) ESPSettings.vehicleChams = v end })
+VehicleSection:AddColorPicker({ Name = "Vehicle Color", Default = Color3.fromRGB(255,200,0), Callback = function(c) ESPSettings.vehicleColor = c end })
+VehicleSection:AddColorPicker({ Name = "Vehicle Cham Color", Default = Color3.fromRGB(255,200,0), Callback = function(c) ESPSettings.vehicleChamColor = c end })
+
+local EquipSection = Visuals:AddSection({ Name = "Equipment", Position = "right" })
+EquipSection:AddToggle({ Name = "Equipment ESP", Default = false, Callback = function(v) ESPSettings.equipmentEnabled = v end })
+EquipSection:AddToggle({ Name = "Equipment Boxes", Default = true, Callback = function(v) ESPSettings.equipmentBoxes = v end })
+EquipSection:AddToggle({ Name = "Equipment Names", Default = true, Callback = function(v) ESPSettings.equipmentNames = v end })
+EquipSection:AddColorPicker({ Name = "Equipment Color", Default = Color3.fromRGB(50,150,255), Callback = function(c) ESPSettings.equipmentColor = c end })
