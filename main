@@ -32,7 +32,7 @@ getgenv()._MDMA_WIN = Window
 local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
 
 loadstring(httpGet(BASE.."esp"))()
-loadstring(httpGet(BASE.."aimbot"))()
+--loadstring(httpGet(BASE.."aimbot"))()
 loadstring(httpGet(BASE.."world"))()
 loadstring(httpGet(BASE.."misc"))()
 loadstring(httpGet(BASE.."settings"))()
