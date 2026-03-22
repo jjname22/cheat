@@ -9,16 +9,20 @@ local AimbotSettings = {
     fov = 100,
     smoothness = 0.1,
     teamCheck = true,
-    showFOV = true,
+    showFOV = false,
     fovColor = Color3.fromRGB(255, 255, 255),
     hitpart = "Head",
-    snapEnabled = true,
+    snapEnabled = false,
     snapFov = 150,
     snapColor = Color3.fromRGB(255, 50, 50),
     snapSmooth = 0.3,
     magicBullet = false,
+    hitboxEnabled = false,
+    hitboxSize = 10,
     bulletTracers = false,
     bulletTracerColor = Color3.fromRGB(255, 200, 0),
+    bulletTracerThickness = 2,
+    bulletTracerTransparency = 0,
     tracers = false,
     tracerColor = Color3.fromRGB(255, 50, 50),
     tracerDistance = false,
@@ -27,9 +31,7 @@ local AimbotSettings = {
     tracerChamColor = Color3.fromRGB(255, 50, 50),
 }
 
--- wait for camera to be ready so circles show immediately
 task.wait(1)
-
 local cam = workspace.CurrentCamera
 
 local fovCircle = Drawing.new("Circle")
@@ -39,7 +41,7 @@ fovCircle.Filled = false
 fovCircle.NumSides = 64
 fovCircle.Radius = 100
 fovCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-fovCircle.Visible = true
+fovCircle.Visible = false
 
 local snapCircle = Drawing.new("Circle")
 snapCircle.Color = Color3.fromRGB(255, 50, 50)
@@ -48,7 +50,7 @@ snapCircle.Filled = false
 snapCircle.NumSides = 64
 snapCircle.Radius = 150
 snapCircle.Position = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-snapCircle.Visible = true
+snapCircle.Visible = false
 
 local tracerLines = {}
 local tracerLabels = {}
@@ -79,47 +81,56 @@ local function getClosest(fovRange, hitpart)
 end
 
 -- MAGIC BULLET
--- moves target HRP to crosshair ray position right before shot
-local magicActive = false
 local magicTarget = nil
 local magicOrigCF = nil
-local magicConnection = nil
 
 local function enableMagicBullet(target)
     if not target or not target.Parent then return end
     local hrp = target.Parent:FindFirstChild("HumanoidRootPart")
     local head = target.Parent:FindFirstChild("Head")
     if not hrp then return end
-
     magicTarget = hrp
     magicOrigCF = hrp.CFrame
-
-    -- get ray from camera to crosshair
     local unitRay = cam:ScreenPointToRay(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
-
-    -- move hrp to be directly on the crosshair ray at same distance
     local dist = (hrp.Position - cam.CFrame.Position).Magnitude
     local newPos = unitRay.Origin + unitRay.Direction * dist
-
-    -- teleport hrp to crosshair
     hrp.CFrame = CFrame.new(newPos)
     if head then head.CFrame = CFrame.new(newPos + Vector3.new(0, 1.5, 0)) end
 end
 
 local function disableMagicBullet()
     if magicTarget and magicOrigCF and magicTarget.Parent then
-        pcall(function()
-            magicTarget.CFrame = magicOrigCF
-        end)
+        pcall(function() magicTarget.CFrame = magicOrigCF end)
     end
     magicTarget = nil
     magicOrigCF = nil
 end
 
--- SMOOTH SNAP - lerps camera toward target instead of instant snap
+-- SNAP
 local snapTarget = nil
 local snapIn = false
 local snapOrigCF = nil
+
+-- HITBOX EXPANDER
+RunService.Heartbeat:Connect(function()
+    if not AimbotSettings.hitboxEnabled then return end
+    for _, player in pairs(Players:GetPlayers()) do
+        if player == localPlayer then continue end
+        local char = player.Character
+        if not char then continue end
+        local parts = {
+            char:FindFirstChild("HumanoidRootPart"),
+            char:FindFirstChild("Head"),
+            char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso"),
+        }
+        for _, part in pairs(parts) do
+            if part then
+                part.Size = Vector3.new(AimbotSettings.hitboxSize, AimbotSettings.hitboxSize, AimbotSettings.hitboxSize)
+                part.LocalTransparencyModifier = 1
+            end
+        end
+    end
+end)
 
 -- BULLET TRACERS
 local effects = workspace:WaitForChild("Effects")
@@ -129,12 +140,12 @@ local function drawBulletTracer(beam)
     local att1 = beam.Attachment1
     if not att0 or not att1 then return end
     local line = Drawing.new("Line")
-    line.Thickness = 2
+    line.Thickness = AimbotSettings.bulletTracerThickness
     line.Color = AimbotSettings.bulletTracerColor
+    line.Transparency = AimbotSettings.bulletTracerTransparency
     line.Visible = true
-    line.Transparency = 0
     local startTime = tick()
-    local duration = 0.2
+    local duration = 0.25
     local conn
     conn = RunService.RenderStepped:Connect(function()
         if not att0 or not att0.Parent or not att1 or not att1.Parent then
@@ -148,7 +159,9 @@ local function drawBulletTracer(beam)
             line.From = sp0
             line.To = sp1
             line.Color = AimbotSettings.bulletTracerColor
-            line.Transparency = elapsed / duration
+            line.Thickness = AimbotSettings.bulletTracerThickness
+            -- fade out over duration
+            line.Transparency = AimbotSettings.bulletTracerTransparency + ((1 - AimbotSettings.bulletTracerTransparency) * (elapsed / duration))
             line.Visible = true
         else
             line.Visible = false
@@ -165,7 +178,6 @@ end)
 RunService.RenderStepped:Connect(function()
     local screenCenter = Vector2.new(cam.ViewportSize.X/2, cam.ViewportSize.Y/2)
 
-    -- FOV CIRCLES always visible
     fovCircle.Position = screenCenter
     fovCircle.Radius = AimbotSettings.fov
     fovCircle.Color = AimbotSettings.fovColor
@@ -192,25 +204,18 @@ RunService.RenderStepped:Connect(function()
             if not snapIn then
                 snapOrigCF = cam.CFrame
                 local target = getClosest(AimbotSettings.snapFov, "Head")
-                if target then
-                    snapTarget = target
-                    snapIn = true
-                end
+                if target then snapTarget = target snapIn = true end
             end
             if snapTarget and snapTarget.Parent then
-                -- smooth lerp instead of instant snap
                 local targetCF = CFrame.new(cam.CFrame.Position, snapTarget.Position)
                 cam.CFrame = cam.CFrame:Lerp(targetCF, AimbotSettings.snapSmooth)
             end
         else
             if snapIn then
-                -- smooth lerp back to original
                 if snapOrigCF then
                     cam.CFrame = cam.CFrame:Lerp(snapOrigCF, AimbotSettings.snapSmooth * 2)
                     if (cam.CFrame.LookVector - snapOrigCF.LookVector).Magnitude < 0.01 then
-                        snapIn = false
-                        snapTarget = nil
-                        snapOrigCF = nil
+                        snapIn = false snapTarget = nil snapOrigCF = nil
                     end
                 end
             end
@@ -221,9 +226,7 @@ RunService.RenderStepped:Connect(function()
     if AimbotSettings.magicBullet then
         if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
             local target = getClosest(AimbotSettings.snapFov, "HumanoidRootPart")
-            if target then
-                enableMagicBullet(target)
-            end
+            if target then enableMagicBullet(target) end
         else
             disableMagicBullet()
         end
@@ -293,15 +296,15 @@ local Aimbot = Window:AddMenu({ Name = "Aimbot", Icon = "crosshair" })
 
 local AimbotSection = Aimbot:AddSection({ Name = "Aimbot", Position = "left" })
 AimbotSection:AddToggle({ Name = "Enable Aimbot", Default = false, Callback = function(v) AimbotSettings.enabled = v end })
-AimbotSection:AddToggle({ Name = "Show FOV", Default = true, Callback = function(v) AimbotSettings.showFOV = v end })
+AimbotSection:AddToggle({ Name = "Show FOV", Default = false, Callback = function(v) AimbotSettings.showFOV = v end })
 AimbotSection:AddToggle({ Name = "Team Check", Default = true, Callback = function(v) AimbotSettings.teamCheck = v end })
 AimbotSection:AddSlider({ Name = "FOV", Default = 100, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.fov = v end })
 AimbotSection:AddSlider({ Name = "Smoothness", Default = 10, Min = 1, Max = 100, Round = 0, Callback = function(v) AimbotSettings.smoothness = v / 100 end })
 AimbotSection:AddDropdown({ Name = "Hit Part", Default = "Head", Values = {"Head", "HumanoidRootPart", "Torso"}, Callback = function(v) AimbotSettings.hitpart = v end })
 AimbotSection:AddColorPicker({ Name = "FOV Color", Default = Color3.fromRGB(255,255,255), Callback = function(c) AimbotSettings.fovColor = c end })
 
-local SnapSection = Aimbot:AddSection({ Name = "Snap / Magic", Position = "center" })
-SnapSection:AddToggle({ Name = "Smooth Snap", Default = true, Callback = function(v)
+local SnapSection = Aimbot:AddSection({ Name = "Silent Aim", Position = "center" })
+SnapSection:AddToggle({ Name = "Smooth Snap", Default = false, Callback = function(v)
     AimbotSettings.snapEnabled = v
     if v then AimbotSettings.magicBullet = false end
 end })
@@ -309,16 +312,22 @@ SnapSection:AddToggle({ Name = "Magic Bullet", Default = false, Callback = funct
     AimbotSettings.magicBullet = v
     if v then AimbotSettings.snapEnabled = false end
 end })
+SnapSection:AddToggle({ Name = "Hitbox Expander", Default = false, Callback = function(v)
+    AimbotSettings.hitboxEnabled = v
+end })
 SnapSection:AddSlider({ Name = "Snap Smoothness", Default = 30, Min = 1, Max = 100, Round = 0, Callback = function(v) AimbotSettings.snapSmooth = v / 100 end })
 SnapSection:AddSlider({ Name = "Snap FOV", Default = 150, Min = 10, Max = 500, Round = 0, Callback = function(v) AimbotSettings.snapFov = v end })
-SnapSection:AddColorPicker({ Name = "Snap Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.snapColor = c end })
+SnapSection:AddSlider({ Name = "Hitbox Size", Default = 10, Min = 1, Max = 50, Round = 0, Callback = function(v) AimbotSettings.hitboxSize = v end })
+SnapSection:AddColorPicker({ Name = "Snap FOV Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.snapColor = c end })
 
 local TracerSection = Aimbot:AddSection({ Name = "Tracers", Position = "right" })
+TracerSection:AddToggle({ Name = "Bullet Tracers", Default = false, Callback = function(v) AimbotSettings.bulletTracers = v end })
+TracerSection:AddSlider({ Name = "Tracer Thickness", Default = 2, Min = 1, Max = 10, Round = 0, Callback = function(v) AimbotSettings.bulletTracerThickness = v end })
+TracerSection:AddSlider({ Name = "Tracer Transparency", Default = 0, Min = 0, Max = 90, Round = 0, Callback = function(v) AimbotSettings.bulletTracerTransparency = v / 100 end })
+TracerSection:AddColorPicker({ Name = "Bullet Color", Default = Color3.fromRGB(255,200,0), Callback = function(c) AimbotSettings.bulletTracerColor = c end })
 TracerSection:AddToggle({ Name = "Player Tracers", Default = false, Callback = function(v) AimbotSettings.tracers = v end })
 TracerSection:AddToggle({ Name = "Show Distance", Default = false, Callback = function(v) AimbotSettings.tracerDistance = v end })
 TracerSection:AddToggle({ Name = "Show Health", Default = false, Callback = function(v) AimbotSettings.tracerHealth = v end })
 TracerSection:AddToggle({ Name = "Chams", Default = false, Callback = function(v) AimbotSettings.tracerChams = v end })
 TracerSection:AddColorPicker({ Name = "Tracer Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerColor = c end })
 TracerSection:AddColorPicker({ Name = "Cham Color", Default = Color3.fromRGB(255,50,50), Callback = function(c) AimbotSettings.tracerChamColor = c end })
-TracerSection:AddToggle({ Name = "Bullet Tracers", Default = false, Callback = function(v) AimbotSettings.bulletTracers = v end })
-TracerSection:AddColorPicker({ Name = "Bullet Color", Default = Color3.fromRGB(255,200,0), Callback = function(c) AimbotSettings.bulletTracerColor = c end })
