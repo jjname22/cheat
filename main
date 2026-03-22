@@ -12,46 +12,26 @@ local function httpGet(url)
     end
 end
 
-local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/"
-local Library = loadstring(httpGet(repo.."Library.lua"))()
+-- load the EXACT lib from the source you provided
+local Library = loadstring(httpGet("https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/Library.lua"))()
 getgenv()._MDMA_LIB = Library
-
-local ThemeManager, SaveManager
-pcall(function() ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lua"))() end)
-pcall(function() SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))() end)
+getgenv().Toggles = getgenv().Toggles or {}
+getgenv().Options = getgenv().Options or {}
 
 local Window = Library:CreateWindow({
     Title = "MDMA",
     Center = true,
     AutoShow = true,
-    TabPadding = 8,
-    MenuFadeTime = 0.2,
 })
 getgenv()._MDMA_WIN = Window
 
 local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
 
-loadstring(httpGet(BASE.."esp"))()
---loadstring(httpGet(BASE.."aimbot"))()
-loadstring(httpGet(BASE.."world"))()
-loadstring(httpGet(BASE.."misc"))()
-loadstring(httpGet(BASE.."settings"))()
+local tabs = {"esp","aimbot","world","misc","settings"}
+for _, name in ipairs(tabs) do
+    local ok, err = pcall(loadstring(httpGet(BASE..name)))
+    if not ok then warn("[MDMA] "..name.." failed: "..tostring(err)) end
+    task.wait(0.1)
+end
 
-pcall(function()
-    if ThemeManager then
-        ThemeManager:SetLibrary(Library)
-        if Window.Tabs["Settings"] then
-            ThemeManager:ApplyToTab(Window.Tabs["Settings"])
-        end
-    end
-end)
-
-pcall(function()
-    if SaveManager then
-        SaveManager:SetLibrary(Library)
-        SaveManager:SetFolder("MDMA")
-        SaveManager:LoadAutoloadConfig()
-    end
-end)
-
-Library:Notify("MDMA loaded", 4)
+Library:Notify("MDMA loaded", 3)
