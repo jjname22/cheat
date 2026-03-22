@@ -1,223 +1,145 @@
-local Window = getgenv()._MDMA_WINDOW
-local Players = game:GetService("Players")
+local Library = getgenv()._MDMA_LIB
+local Window = getgenv()._MDMA_WIN
+local Toggles = getgenv().Toggles
+local Options = getgenv().Options
+
+local Tab = Window:AddTab("World")
+local LBox = Tab:AddLeftGroupbox("Lighting")
+local RBox = Tab:AddRightGroupbox("Character")
+
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
-local localPlayer = Players.LocalPlayer
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-local WorldSettings = {
-    fullbright = false,
-    nofog = false,
-    timeOfDay = 14,
-    brightness = 10,
-    ambient = Color3.fromRGB(255, 255, 255),
-    selfChams = false,
-    selfChamColor = Color3.fromRGB(0, 200, 255),
-    lowTxt = false,
-}
+-- Fullbright
+local origBrightness, origAmbient, origOutdoor
+local fullbrightConn
 
--- SAVE ORIGINAL LIGHTING
-local origLighting = {
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    GlobalShadows = Lighting.GlobalShadows,
-    Ambient = Lighting.Ambient,
-    OutdoorAmbient = Lighting.OutdoorAmbient,
-}
-
--- FULLBRIGHT - uses property changed signals to fight game lighting
-local function enableFullbright()
-    Lighting.Brightness = 1
-    Lighting.ClockTime = 12
-    Lighting.FogEnd = 786543
-    Lighting.GlobalShadows = false
-    Lighting.Ambient = Color3.fromRGB(178, 178, 178)
-    Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
-    for _, v in pairs(Lighting:GetDescendants()) do
-        if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or
-           v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") or
-           v:IsA("Atmosphere") then
-            v.Enabled = false
-        end
-    end
-end
-
-local function disableFullbright()
-    Lighting.Brightness = origLighting.Brightness
-    Lighting.ClockTime = origLighting.ClockTime
-    Lighting.FogEnd = origLighting.FogEnd
-    Lighting.GlobalShadows = origLighting.GlobalShadows
-    Lighting.Ambient = origLighting.Ambient
-    Lighting.OutdoorAmbient = origLighting.OutdoorAmbient
-    for _, v in pairs(Lighting:GetDescendants()) do
-        if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or
-           v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") or
-           v:IsA("Atmosphere") then
-            v.Enabled = true
-        end
-    end
-end
-
--- FIGHT GAME LIGHTING CHANGES
-Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
-    if WorldSettings.fullbright and Lighting.Brightness ~= 1 then
-        Lighting.Brightness = 1
-    end
-end)
-Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
-    if WorldSettings.fullbright and Lighting.ClockTime ~= 12 then
-        Lighting.ClockTime = 12
-    end
-end)
-Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
-    if WorldSettings.fullbright and Lighting.FogEnd ~= 786543 then
-        Lighting.FogEnd = 786543
-    end
-end)
-Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
-    if WorldSettings.fullbright and Lighting.GlobalShadows ~= false then
-        Lighting.GlobalShadows = false
-    end
-end)
-Lighting:GetPropertyChangedSignal("Ambient"):Connect(function()
-    if WorldSettings.fullbright and Lighting.Ambient ~= Color3.fromRGB(178, 178, 178) then
-        Lighting.Ambient = Color3.fromRGB(178, 178, 178)
-    end
-end)
-
--- NO FOG LOOP
-task.spawn(function()
-    while true do
-        task.wait()
-        if WorldSettings.nofog then
-            Lighting.FogEnd = 1e6
-            Lighting.FogStart = 1e6
-        end
-    end
-end)
-
--- LOW TEXTURES - based on actual apoc 2 tree structure
--- Targets: TreeOak, TreeDead, FoliageShrubDead, TreeCandlenut etc
--- Inside each: Leaves, Trunk, Basetree parts
-local hiddenParts = {}
-
-local function applyLowTxt()
-    local elements = workspace:FindFirstChild("Elements")
-    if not elements then
-        -- fallback search whole workspace
-        for _, obj in pairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                local name = obj.Name:lower()
-                local parentName = obj.Parent and obj.Parent.Name:lower() or ""
-                if name:find("leave") or name:find("trunk") or name:find("basetree") or
-                   parentName:find("tree") or parentName:find("foliage") or
-                   parentName:find("shrub") or parentName:find("bush") or
-                   parentName:find("plant") then
-                    table.insert(hiddenParts, {part = obj, trans = obj.Transparency})
-                    obj.Transparency = 1
+LBox:AddToggle("Fullbright", {
+    Text = "Fullbright",
+    Default = false,
+    Callback = function(v)
+        if v then
+            origBrightness = Lighting.Brightness
+            origAmbient = Lighting.Ambient
+            origOutdoor = Lighting.OutdoorAmbient
+            Lighting.Brightness = 2
+            Lighting.Ambient = Color3.new(1,1,1)
+            Lighting.OutdoorAmbient = Color3.new(1,1,1)
+            fullbrightConn = Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
+                if Toggles.Fullbright and Toggles.Fullbright.Value then
+                    Lighting.Brightness = 2
                 end
+            end)
+        else
+            if fullbrightConn then fullbrightConn:Disconnect() end
+            Lighting.Brightness = origBrightness or 1
+            Lighting.Ambient = origAmbient or Color3.new(0,0,0)
+            Lighting.OutdoorAmbient = origOutdoor or Color3.new(0.5,0.5,0.5)
+        end
+    end
+})
+
+-- No Fog
+local fogThread
+LBox:AddToggle("NoFog", {
+    Text = "No Fog",
+    Default = false,
+    Callback = function(v)
+        if v then
+            fogThread = task.spawn(function()
+                while Toggles.NoFog and Toggles.NoFog.Value do
+                    Lighting.FogEnd = 1e6
+                    Lighting.FogStart = 1e6
+                    task.wait(0.1)
+                end
+            end)
+        else
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+        end
+    end
+})
+
+-- No effects (blur, atmosphere etc)
+LBox:AddToggle("NoEffects", {
+    Text = "No Post Effects",
+    Default = false,
+    Callback = function(v)
+        for _, obj in ipairs(Lighting:GetDescendants()) do
+            if obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect")
+            or obj:IsA("SunRaysEffect") or obj:IsA("DepthOfFieldEffect") then
+                obj.Enabled = not v
             end
-        end
-        return
-    end
-
-    for _, folder in pairs(elements:GetChildren()) do
-        local fname = folder.Name:lower()
-        if fname:find("tree") or fname:find("foliage") or fname:find("shrub") or
-           fname:find("bush") or fname:find("plant") or fname:find("rock") then
-            for _, obj in pairs(folder:GetDescendants()) do
-                if obj:IsA("BasePart") then
-                    table.insert(hiddenParts, {part = obj, trans = obj.Transparency})
-                    obj.Transparency = 1
-                end
+            if obj:IsA("Atmosphere") then
+                pcall(function()
+                    obj.Density = v and 0 or 0.3
+                    obj.Haze = v and 0 or 0
+                    obj.Glare = v and 0 or 0
+                    obj.Flare = v and 0 or 0
+                end)
             end
         end
     end
-end
+})
 
-local function removeLowTxt()
-    for _, data in pairs(hiddenParts) do
-        if data.part and data.part.Parent then
-            data.part.Transparency = data.trans
-        end
-    end
-    table.clear(hiddenParts)
-end
-
--- SELF CHAMS LOOP
-RunService.RenderStepped:Connect(function()
-    if WorldSettings.selfChams then
-        local char = localPlayer.Character
-        if char then
-            for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    if part.Name == "HumanoidRootPart" then continue end
-                    part.Color = WorldSettings.selfChamColor
-                    part.Transparency = 0.3
-                    part.Material = Enum.Material.ForceField
-                end
-                if part:IsA("Shirt") or part:IsA("Pants") or part:IsA("ShirtGraphic") then
-                    part:Destroy()
-                end
-                if part:IsA("Accessory") then
-                    part:Destroy()
-                end
-            end
-        end
-    end
-end)
-
--- UI
-local World = Window:AddMenu({ Name = "World", Icon = "sun" })
-
-local LightSection = World:AddSection({ Name = "Lighting", Position = "left" })
-
-LightSection:AddToggle({ Name = "Fullbright", Default = false, Callback = function(v)
-    WorldSettings.fullbright = v
-    if v then enableFullbright() else disableFullbright() end
-end })
-
-LightSection:AddToggle({ Name = "No Fog", Default = false, Callback = function(v)
-    WorldSettings.nofog = v
-    if not v then
-        Lighting.FogEnd = origLighting.FogEnd
-        Lighting.FogStart = origLighting.FogStart or 0
-    end
-end })
-
-LightSection:AddToggle({ Name = "Low Textures", Default = false, Callback = function(v)
-    WorldSettings.lowTxt = v
-    if v then applyLowTxt() else removeLowTxt() end
-end })
-
-LightSection:AddSlider({ Name = "Brightness", Default = 5, Min = 1, Max = 20, Round = 0, Callback = function(v)
-    WorldSettings.brightness = v
-    if not WorldSettings.fullbright then
-        Lighting.Brightness = v
-    end
-end })
-
-LightSection:AddSlider({ Name = "Time of Day", Default = 14, Min = 0, Max = 24, Round = 0, Callback = function(v)
-    WorldSettings.timeOfDay = v
-    if not WorldSettings.fullbright then
+-- Time of day
+LBox:AddSlider("TimeOfDay", {
+    Text = "Time of Day",
+    Default = 14,
+    Min = 0,
+    Max = 24,
+    Rounding = 0,
+    Callback = function(v)
         Lighting.ClockTime = v
     end
-end })
+})
 
-LightSection:AddColorPicker({ Name = "Ambient", Default = Color3.fromRGB(128,128,128), Callback = function(c)
-    WorldSettings.ambient = c
-    if not WorldSettings.fullbright then
-        Lighting.Ambient = c
-        Lighting.OutdoorAmbient = c
+-- Low Textures
+LBox:AddToggle("LowTextures", {
+    Text = "Low Textures",
+    Default = false,
+    Callback = function(v)
+        if workspace:FindFirstChild("Elements") then
+            for _, obj in ipairs(workspace.Elements:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    obj.Material = v and Enum.Material.SmoothPlastic or Enum.Material.SmoothPlastic
+                    if v then obj.TextureID = "" end
+                end
+                if obj:IsA("Decal") or obj:IsA("Texture") then
+                    obj.Transparency = v and 1 or 0
+                end
+            end
+        end
     end
-end })
+})
 
-local CharSection = World:AddSection({ Name = "Character", Position = "center" })
-
-CharSection:AddToggle({ Name = "Self Chams", Default = false, Callback = function(v)
-    WorldSettings.selfChams = v
-end })
-
-CharSection:AddColorPicker({ Name = "Self Cham Color", Default = Color3.fromRGB(0,200,255), Callback = function(c)
-    WorldSettings.selfChamColor = c
-end })
+-- Self Chams
+local selfChamsConn
+RBox:AddToggle("SelfChams", {
+    Text = "Self Chams",
+    Default = false,
+    Callback = function(v)
+        if selfChamsConn then selfChamsConn:Disconnect() end
+        local function applyChams()
+            local char = LocalPlayer.Character
+            if not char then return end
+            for _, p in ipairs(char:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    if v then
+                        p.Material = Enum.Material.ForceField
+                        p.LocalTransparencyModifier = 0
+                    else
+                        p.Material = Enum.Material.SmoothPlastic
+                    end
+                end
+            end
+        end
+        if v then
+            selfChamsConn = RunService.RenderStepped:Connect(applyChams)
+        else
+            applyChams()
+        end
+    end
+})
