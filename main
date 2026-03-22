@@ -31,6 +31,18 @@ local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
 
 if not gethui then getgenv().gethui = function() return game:GetService("CoreGui") end end
 if not protect_gui then getgenv().protect_gui = function() end end
+-- fix protect_gui before loading fatality
+if not protect_gui then
+    getgenv().protect_gui = function(gui)
+        gui.Parent = gethui and gethui() or game:GetService("CoreGui")
+    end
+end
+
+if not gethui then
+    getgenv().gethui = function()
+        return game:GetService("CoreGui")
+    end
+end
 
 local Fatality = loadstring(httpGet("https://raw.githubusercontent.com/4lpaca-pin/Fatality/refs/heads/main/src/source.luau"))()
 
