@@ -31,11 +31,8 @@ local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
 
 local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/"
 local Library = loadstring(httpGet(repo.."Library.lua"))()
-
--- store lib BEFORE anything else runs
 getgenv()._MDMA_LIB = Library
 
--- safe addon loads - won't crash main if 404
 local ThemeManager, SaveManager
 pcall(function() ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lua"))() end)
 pcall(function() SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))() end)
@@ -47,38 +44,22 @@ local Window = Library:CreateWindow({
     TabPadding = 8,
     MenuFadeTime = 0.2,
 })
-
--- store window BEFORE loading tabs so they can access it
 getgenv()._MDMA_WIN = Window
 
-print("[MDMA] window ready, loading tabs...")
-
 local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
-local tabs = {"esp","aimbot","world","misc","settings"}
 
-for _, name in ipairs(tabs) do
-    print("[MDMA] loading "..name.."...")
-    local ok, err = pcall(function()
-        local src = httpGet(BASE..name)
-        local fn, compErr = loadstring(src)
-        if not fn then error("compile err: "..tostring(compErr)) end
-        fn()
-    end)
-    if not ok then
-        warn("[MDMA] "..name.." FAILED: "..tostring(err))
-        Library:Notify(name.." failed to load", 4)
-    else
-        print("[MDMA] "..name.." OK")
-    end
-    task.wait(0.3)
-end
+loadstring(httpGet(BASE.."esp"))()
+loadstring(httpGet(BASE.."aimbot"))()
+loadstring(httpGet(BASE.."world"))()
+loadstring(httpGet(BASE.."misc"))()
+loadstring(httpGet(BASE.."settings"))()
 
--- apply addons after all tabs loaded
 pcall(function()
     if ThemeManager then
         ThemeManager:SetLibrary(Library)
-        local s = Window.Tabs["Settings"]
-        if s then ThemeManager:ApplyToTab(s) end
+        if Window.Tabs["Settings"] then
+            ThemeManager:ApplyToTab(Window.Tabs["Settings"])
+        end
     end
 end)
 
