@@ -3,11 +3,11 @@ local HttpService = game:GetService("HttpService")
 
 local function httpGet(url)
     if syn and syn.request then
-        return syn.request({Url = url, Method = "GET"}).Body
+        return syn.request({Url=url,Method="GET"}).Body
     elseif http_request then
-        return http_request({Url = url, Method = "GET"}).Body
+        return http_request({Url=url,Method="GET"}).Body
     elseif request then
-        return request({Url = url, Method = "GET"}).Body
+        return request({Url=url,Method="GET"}).Body
     else
         return game:HttpGet(url)
     end
@@ -18,7 +18,7 @@ local function validate()
     local hwid = getgenv()._AUTH_HWID
     if not key or not hwid then return false end
     local ok, raw = pcall(function()
-        return httpGet(VERIFY_URL .. "/api/checkhwid?hwid=" .. hwid)
+        return httpGet(VERIFY_URL.."/api/checkhwid?hwid="..hwid)
     end)
     if not ok then return false end
     local data = HttpService:JSONDecode(raw)
@@ -29,44 +29,42 @@ if not validate() then error("unauthorized") return end
 
 local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
 
-if not gethui then getgenv().gethui = function() return game:GetService("CoreGui") end end
-if not protect_gui then getgenv().protect_gui = function() end end
--- fix protect_gui before loading fatality
-if not protect_gui then
-    getgenv().protect_gui = function(gui)
-        gui.Parent = gethui and gethui() or game:GetService("CoreGui")
-    end
-end
+-- Load Linoria
+local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/"
+local Library = loadstring(httpGet(repo.."Library.lua"))()
+local ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lua"))()
+local SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))()
 
-if not gethui then
-    getgenv().gethui = function()
-        return game:GetService("CoreGui")
-    end
-end
-
-local Fatality = loadstring(httpGet("https://raw.githubusercontent.com/4lpaca-pin/Fatality/refs/heads/main/src/source.luau"))()
-
-local Window = Fatality.new({
-    Name = "MDMA",
-    Keybind = "RightShift",
-    Expire = expiry,
+local Window = Library:CreateWindow({
+    Title = "MDMA  |  "..expiry,
+    Center = true,
+    AutoShow = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2,
 })
 
-getgenv()._MDMA_WINDOW = Window
+getgenv()._MDMA_LIB = Library
+getgenv()._MDMA_WIN = Window
 
-loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/esp"))()
-wait("0.5")
-wait("0.5")
-loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/world"))()
-wait("0.5")
---loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/aimbot"))()
-wait("0.5")
-loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/settings"))()
-wait("0.5")
+local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
 
-Window.Notifier:Notify({
-    Title = "Welcome to MDMA",
-    Content = "Expires: " .. expiry,
-    Icon = "check-circle",
-    Duration = 5,
-})
+local tabs = {"esp","aimbot","world","misc","settings"}
+for _, name in ipairs(tabs) do
+    local ok, err = pcall(function()
+        loadstring(httpGet(BASE..name))()
+    end)
+    if not ok then
+        warn("["..name.."] failed: "..tostring(err))
+    else
+        print("["..name.."] ok")
+    end
+    task.wait(0.2)
+end
+
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+SaveManager:SetFolder("MDMA")
+ThemeManager:ApplyToTab(Window.Tabs["Settings"])
+SaveManager:LoadAutoloadConfig()
+
+Library:Notify("MDMA loaded", 3)
