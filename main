@@ -1,4 +1,3 @@
-local VERIFY_URL = "https://keysystem2.vercel.app"
 local HttpService = game:GetService("HttpService")
 
 local function httpGet(url)
@@ -13,22 +12,6 @@ local function httpGet(url)
     end
 end
 
-local function validate()
-    local key = getgenv()._AUTH_KEY
-    local hwid = getgenv()._AUTH_HWID
-    if not key or not hwid then return false end
-    local ok, raw = pcall(function()
-        return httpGet(VERIFY_URL.."/api/checkhwid?hwid="..hwid)
-    end)
-    if not ok then return false end
-    local data = HttpService:JSONDecode(raw)
-    return data.valid == true and data.key == key
-end
-
-if not validate() then error("unauthorized") return end
-
-local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
-
 local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/"
 local Library = loadstring(httpGet(repo.."Library.lua"))()
 getgenv()._MDMA_LIB = Library
@@ -38,7 +21,7 @@ pcall(function() ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lu
 pcall(function() SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))() end)
 
 local Window = Library:CreateWindow({
-    Title = "MDMA  |  "..expiry,
+    Title = "MDMA",
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -71,4 +54,4 @@ pcall(function()
     end
 end)
 
-Library:Notify("MDMA loaded  |  "..expiry, 4)
+Library:Notify("MDMA loaded", 4)
