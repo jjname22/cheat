@@ -43,10 +43,15 @@ local Window = Fatality.new({
 getgenv()._MDMA_WINDOW = Window
 
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/esp"))()
+wait("0.5")
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/aimbot"))()
+wait("0.5")
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/world"))()
+wait("0.5")
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/misc"))()
+wait("0.5")
 loadstring(httpGet("https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/settings"))()
+wait("0.5")
 
 Window.Notifier:Notify({
     Title = "Welcome to MDMA",
