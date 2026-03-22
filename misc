@@ -1,255 +1,162 @@
 local Window = getgenv()._MDMA_WINDOW
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local VIM = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
 local lp = Players.LocalPlayer
 
-local MiscSettings = {
-    speedOn = false,
-    speed = 25,
-    flyOn = false,
-    flySpeed = 25,
-    noclip = false,
-    vehicleFlyOn = false,
-    vehicleFlySpeed = 80,
+local WorldSettings = {
+    fullbright = false,
+    nofog = false,
+    timeOfDay = 14,
+    selfChams = false,
+    selfChamColor = Color3.fromRGB(0, 200, 255),
 }
 
-local bv, bg
+local origLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd,
+    FogStart = Lighting.FogStart,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+}
 
-local function sendKey(key, down)
-    pcall(function() VIM:SendKeyEvent(down, key, false, game) end)
-end
-
-local function enableAutoSprint()
-    sendKey(Enum.KeyCode.RightShift, true)
-    task.wait(0.1)
-    sendKey(Enum.KeyCode.RightShift, false)
-end
-
-local function disableAutoSprint()
-    sendKey(Enum.KeyCode.RightShift, true)
-    task.wait(0.1)
-    sendKey(Enum.KeyCode.RightShift, false)
-end
-
-local function attachFly()
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not hrp or not hum then return end
-    hum.PlatformStand = true
-    bv = Instance.new("BodyVelocity")
-    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-    bv.Velocity = Vector3.zero
-    bv.P = 1e9
-    bv.Parent = hrp
-    bg = Instance.new("BodyGyro")
-    bg.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
-    bg.P = 1e9
-    bg.D = 100
-    bg.CFrame = hrp.CFrame
-    bg.Parent = hrp
-end
-
-local function detachFly()
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if bv then bv:Destroy() bv = nil end
-    if bg then bg:Destroy() bg = nil end
-    if hum then hum.PlatformStand = false end
-    if hrp then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
+local function enableFullbright()
+    Lighting.Brightness = 1
+    Lighting.ClockTime = 12
+    Lighting.FogEnd = 786543
+    Lighting.GlobalShadows = false
+    Lighting.Ambient = Color3.fromRGB(178, 178, 178)
+    Lighting.OutdoorAmbient = Color3.fromRGB(178, 178, 178)
+    for _, v in pairs(Lighting:GetDescendants()) do
+        -- only toggle things that actually have Enabled
+        if v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or
+           v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
+            pcall(function() v.Enabled = false end)
+        end
+        -- atmosphere fix - no Enabled property, use density
+        if v:IsA("Atmosphere") then
+            pcall(function()
+                v.Density = 0
+                v.Haze = 0
+                v.Glare = 0
+                v.Flare = 0
+            end)
+        end
     end
 end
 
--- SPEED HACK
-RunService.Heartbeat:Connect(function(dt)
-    if not MiscSettings.speedOn then return end
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not hrp or not hum then return end
-    if hum.MoveDirection.Magnitude == 0 then return end
-    hum:ChangeState(Enum.HumanoidStateType.Running)
-    local move = hum.MoveDirection * MiscSettings.speed * dt
-    local rayParams = RaycastParams.new()
-    rayParams.FilterDescendantsInstances = {char}
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    local result = workspace:Raycast(hrp.Position, Vector3.new(0, -5, 0), rayParams)
-    local newPos = hrp.Position + move
-    if result then newPos = Vector3.new(newPos.X, result.Position.Y + 3, newPos.Z) end
-    hrp.CFrame = CFrame.new(newPos) * (hrp.CFrame - hrp.CFrame.Position)
-    hrp.AssemblyLinearVelocity = Vector3.zero
+local function disableFullbright()
+    Lighting.Brightness = origLighting.Brightness
+    Lighting.ClockTime = origLighting.ClockTime
+    Lighting.FogEnd = origLighting.FogEnd
+    Lighting.GlobalShadows = origLighting.GlobalShadows
+    Lighting.Ambient = origLighting.Ambient
+    Lighting.OutdoorAmbient = origLighting.OutdoorAmbient
+end
+
+-- fight game lighting loop
+Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
+    if WorldSettings.fullbright and Lighting.Brightness ~= 1 then
+        Lighting.Brightness = 1
+    end
+end)
+Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
+    if WorldSettings.fullbright and Lighting.ClockTime ~= 12 then
+        Lighting.ClockTime = 12
+    end
+end)
+Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+    if WorldSettings.fullbright and Lighting.FogEnd ~= 786543 then
+        Lighting.FogEnd = 786543
+    end
 end)
 
--- FLY
+-- no fog loop
+task.spawn(function()
+    while true do
+        task.wait()
+        if WorldSettings.nofog then
+            Lighting.FogEnd = 1e6
+            Lighting.FogStart = 1e6
+        end
+    end
+end)
+
+-- self chams loop
 RunService.RenderStepped:Connect(function()
-    if not MiscSettings.flyOn then return end
-    local char = lp.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChild("Humanoid")
-    if not hrp or not hum then return end
-    if not bv or not bv.Parent then attachFly() return end
-    hum.PlatformStand = true
-    local cam = workspace.CurrentCamera
-    local dir = Vector3.zero
-    if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
-    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
-    if dir.Magnitude > 0 then
-        bv.Velocity = dir.Unit * MiscSettings.flySpeed
-    else
-        bv.Velocity = Vector3.zero
-        hrp.AssemblyLinearVelocity = Vector3.zero
-    end
-    bg.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
-    hrp.AssemblyLinearVelocity = bv.Velocity
-end)
-
-RunService.Heartbeat:Connect(function()
-    if not MiscSettings.flyOn then return end
-    local char = lp.Character
-    if not char then return end
-    local hum = char:FindFirstChild("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hum then hum.PlatformStand = true end
-    if hrp then hrp.AssemblyAngularVelocity = Vector3.zero end
-end)
-
--- VEHICLE FLY
-RunService.Heartbeat:Connect(function(dt)
-    if not MiscSettings.vehicleFlyOn then return end
-    local char = lp.Character
-    if not char then return end
-    local hum = char:FindFirstChild("Humanoid")
-    if not hum then return end
-    local seat = hum.SeatPart
-    if not seat then return end
-    local vehicle = seat.Parent
-    if not vehicle then return end
-    local root = vehicle.PrimaryPart or seat
-    local cam = workspace.CurrentCamera
-    local dir = Vector3.zero
-    local spd = MiscSettings.vehicleFlySpeed
-    if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then spd = spd * 2 end
-    if UIS:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
-    if UIS:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
-    if UIS:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
-    if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then dir -= Vector3.new(0,1,0) end
-    if dir.Magnitude > 0 then
-        local move = dir.Unit * spd * dt
-        local newCFrame = CFrame.new(root.Position + move, root.Position + move + cam.CFrame.LookVector)
-        if vehicle.PrimaryPart then
-            vehicle:SetPrimaryPartCFrame(newCFrame)
-        else
-            root.CFrame = newCFrame
-        end
-    end
-    for _, part in pairs(vehicle:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.AssemblyLinearVelocity = Vector3.zero
-            part.AssemblyAngularVelocity = Vector3.zero
-        end
-    end
-end)
-
--- NOCLIP
-RunService.Stepped:Connect(function()
-    if not MiscSettings.noclip then return end
-    local char = lp.Character
-    if not char then return end
-    for _, part in pairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then part.CanCollide = false end
-    end
-end)
-
-lp.CharacterAdded:Connect(function()
-    bv = nil bg = nil
-    if MiscSettings.flyOn then task.wait(0.5) attachFly() end
-end)
-
--- UI
-local Misc = Window:AddTab({ Name = "Misc" })
-
-local mcol1 = Misc:AddColumn()
-local MovSec = mcol1:AddSection({ Name = "Movement" })
-
-MovSec:AddToggle({ Name = "Speed Hack", Default = false, Callback = function(v)
-    MiscSettings.speedOn = v
-    if v then enableAutoSprint()
-    else
-        disableAutoSprint()
-        local char = lp.Character
-        if char then
-            local hum = char:FindFirstChild("Humanoid")
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if hum then hum.PlatformStand = false end
-            if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
-        end
-    end
-end })
-
-MovSec:AddSlider({ Name = "Speed", Default = 25, Min = 1, Max = 27, Step = 1, Callback = function(v)
-    MiscSettings.speed = v
-end })
-
-MovSec:AddToggle({ Name = "Fly", Default = false, Callback = function(v)
-    MiscSettings.flyOn = v
-    if v then attachFly() else detachFly() end
-end })
-
-MovSec:AddSlider({ Name = "Fly Speed", Default = 25, Min = 25, Max = 50, Step = 1, Callback = function(v)
-    MiscSettings.flySpeed = v
-end })
-
-MovSec:AddToggle({ Name = "Noclip", Default = false, Callback = function(v)
-    MiscSettings.noclip = v
-    if not v then
+    if WorldSettings.selfChams then
         local char = lp.Character
         if char then
             for _, part in pairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
+                if part:IsA("BasePart") then
+                    if part.Name == "HumanoidRootPart" then continue end
+                    part.Color = WorldSettings.selfChamColor
+                    part.Transparency = 0.3
+                    part.Material = Enum.Material.ForceField
+                end
+                if part:IsA("Shirt") or part:IsA("Pants") or part:IsA("ShirtGraphic") then
+                    pcall(function() part:Destroy() end)
+                end
+                if part:IsA("Accessory") then
+                    pcall(function() part:Destroy() end)
+                end
             end
         end
     end
+end)
+
+-- UI
+local World = Window:AddTab({ Name = "World" })
+
+local wcol1 = World:AddColumn()
+local LightSec = wcol1:AddSection({ Name = "Lighting" })
+
+LightSec:AddToggle({ Name = "Fullbright", Default = false, Callback = function(v)
+    WorldSettings.fullbright = v
+    if v then enableFullbright() else disableFullbright() end
 end })
 
-local mcol2 = Misc:AddColumn()
-local VehSec = mcol2:AddSection({ Name = "Vehicle" })
-
-VehSec:AddToggle({ Name = "Vehicle Fly", Default = false, Callback = function(v)
-    MiscSettings.vehicleFlyOn = v
+LightSec:AddToggle({ Name = "No Fog", Default = false, Callback = function(v)
+    WorldSettings.nofog = v
+    if not v then
+        Lighting.FogEnd = origLighting.FogEnd
+        Lighting.FogStart = origLighting.FogStart
+    end
 end })
 
-VehSec:AddSlider({ Name = "Vehicle Speed", Default = 80, Min = 10, Max = 500, Step = 10, Callback = function(v)
-    MiscSettings.vehicleFlySpeed = v
+LightSec:AddSlider({ Name = "Time of Day", Default = 14, Min = 0, Max = 24, Step = 1, Callback = function(v)
+    WorldSettings.timeOfDay = v
+    if not WorldSettings.fullbright then
+        Lighting.ClockTime = v
+    end
 end })
 
-local mcol3 = Misc:AddColumn()
-local UtilSec = mcol3:AddSection({ Name = "Utility" })
+local wcol2 = World:AddColumn()
+local CharSec = wcol2:AddSection({ Name = "Character" })
 
-UtilSec:AddButton({ Name = "Copy HWID", Callback = function()
-    setclipboard(getgenv()._AUTH_HWID or game:GetService("RbxAnalyticsService"):GetClientId())
-    Window.Notifier:Notify({ Title = "HWID Copied", Content = getgenv()._AUTH_HWID or "copied", Duration = 3 })
+CharSec:AddToggle({ Name = "Self Chams", Default = false, Callback = function(v)
+    WorldSettings.selfChams = v
 end })
 
-UtilSec:AddButton({ Name = "Discord", Callback = function()
-    setclipboard("https://discord.gg/YOURLINK")
-    Window.Notifier:Notify({ Title = "Discord", Content = "Link copied.", Duration = 3 })
+CharSec:AddToggle({ Name = "Self Cham Color", Default = false, Callback = function(v)
+    -- cycle through colors
+    local colors = {
+        Color3.fromRGB(0, 200, 255),
+        Color3.fromRGB(255, 50, 50),
+        Color3.fromRGB(50, 255, 50),
+        Color3.fromRGB(255, 200, 0),
+    }
+    local idx = 1
+    for i, c in pairs(colors) do
+        if c == WorldSettings.selfChamColor then idx = i break end
+    end
+    idx = (idx % #colors) + 1
+    WorldSettings.selfChamColor = colors[idx]
 end })
 
-UtilSec:AddButton({ Name = "Rejoin", Callback = function()
-    game:GetService("TeleportService"):Teleport(game.PlaceId, lp)
-end })
+local wcol3 = World:AddColumn()
+local InfoSec = wcol3:AddSection({ Name = "Info" })
+InfoSec:AddLabel({ Name = "Game", Value = tostring(game.PlaceId) })
+InfoSec:AddLabel({ Name = "Players", Value = tostring(#Players:GetPlayers()) })
