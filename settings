@@ -1,48 +1,78 @@
-local Window = getgenv()._MDMA_WINDOW
+local Library = getgenv()._MDMA_LIB
+local Window = getgenv()._MDMA_WIN
+local Toggles = getgenv().Toggles
+local Options = getgenv().Options
+
+local Tab = Window:AddTab("Settings")
+local LBox = Tab:AddLeftGroupbox("Menu")
+local RBox = Tab:AddRightGroupbox("Config")
+
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
-local localPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
 
-local currentKeybind = Enum.KeyCode.Insert
+-- Keybind to toggle menu (default RightShift - already in Linoria, but we expose it)
+LBox:AddLabel("Toggle Key: RightShift / RightCtrl")
+LBox:AddDivider()
 
-UIS.InputBegan:Connect(function(input, typing)
-    if typing then return end
-    if input.KeyCode == currentKeybind then
-        Window:SetVisible(not Window.Toggle)
+LBox:AddButton({
+    Text = "Copy HWID",
+    Func = function()
+        local ok, id = pcall(function()
+            return game:GetService("RbxAnalyticsService"):GetClientId()
+        end)
+        pcall(setclipboard, ok and id or "unavailable")
+        Library:Notify("HWID copied!", 3)
     end
-end)
+})
 
-local Settings = Window:AddMenu({ Name = "Settings", Icon = "settings" })
-
-local UISection = Settings:AddSection({ Name = "Interface", Position = "left" })
-
-UISection:AddKeybind({ Name = "Toggle Menu", Default = Enum.KeyCode.Insert, Callback = function(k)
-    local ok, key = pcall(function()
-        return typeof(k) == "string" and Enum.KeyCode[k] or k
-    end)
-    if ok and key then
-        currentKeybind = key
-        Window.Notifier:Notify({
-            Title = "Keybind Updated",
-            Content = "Menu toggle set to: " .. tostring(key),
-            Icon = "keyboard",
-            Duration = 3,
-        })
+LBox:AddButton({
+    Text = "Copy Discord",
+    Func = function()
+        pcall(setclipboard, "https://discord.gg/YOURLINK")
+        Library:Notify("Discord link copied!", 3)
     end
-end })
+})
 
-local MiscSection = Settings:AddSection({ Name = "Misc", Position = "center" })
+LBox:AddButton({
+    Text = "Rejoin",
+    Func = function()
+        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
+    end
+})
 
-MiscSection:AddButton({ Name = "Copy HWID", Callback = function()
-    setclipboard(getgenv()._AUTH_HWID)
-    Window.Notifier:Notify({ Title = "HWID Copied", Content = getgenv()._AUTH_HWID, Icon = "clipboard", Duration = 3 })
-end })
+LBox:AddButton({
+    Text = "Unload MDMA",
+    Func = function()
+        Library:Notify("Unloading...", 2)
+        task.wait(2)
+        Library:Unload()
+    end
+})
 
-MiscSection:AddButton({ Name = "Discord", Callback = function()
-    setclipboard("https://discord.gg/YOURLINK")
-    Window.Notifier:Notify({ Title = "Discord", Content = "Link copied.", Icon = "link", Duration = 3 })
-end })
+-- ThemeManager and SaveManager get applied here by main.lua after tabs load
+-- RBox is passed to ThemeManager:ApplyToTab in main
+-- SaveManager autoload config also handled in main
 
-MiscSection:AddButton({ Name = "Rejoin", Callback = function()
-    game:GetService("TeleportService"):Teleport(game.PlaceId, localPlayer)
-end })
+RBox:AddLabel("Theme & Config")
+RBox:AddDivider()
+
+-- SaveManager manual save/load buttons
+RBox:AddButton({
+    Text = "Save Config",
+    Func = function()
+        if Library.SaveManager then
+            Library.SaveManager:Save()
+            Library:Notify("Config saved!", 3)
+        end
+    end
+})
+
+RBox:AddButton({
+    Text = "Load Config",
+    Func = function()
+        if Library.SaveManager then
+            Library.SaveManager:Load()
+            Library:Notify("Config loaded!", 3)
+        end
+    end
+})
