@@ -29,11 +29,16 @@ if not validate() then error("unauthorized") return end
 
 local expiry = getgenv()._AUTH_EXPIRY or "lifetime"
 
--- Load Linoria
 local repo = "https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/refs/heads/main/"
 local Library = loadstring(httpGet(repo.."Library.lua"))()
-local ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lua"))()
-local SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))()
+
+-- store lib BEFORE anything else runs
+getgenv()._MDMA_LIB = Library
+
+-- safe addon loads - won't crash main if 404
+local ThemeManager, SaveManager
+pcall(function() ThemeManager = loadstring(httpGet(repo.."addons/ThemeManager.lua"))() end)
+pcall(function() SaveManager = loadstring(httpGet(repo.."addons/SaveManager.lua"))() end)
 
 local Window = Library:CreateWindow({
     Title = "MDMA  |  "..expiry,
@@ -43,28 +48,46 @@ local Window = Library:CreateWindow({
     MenuFadeTime = 0.2,
 })
 
-getgenv()._MDMA_LIB = Library
+-- store window BEFORE loading tabs so they can access it
 getgenv()._MDMA_WIN = Window
 
-local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
+print("[MDMA] window ready, loading tabs...")
 
+local BASE = "https://raw.githubusercontent.com/jjname22/cheat/refs/heads/main/"
 local tabs = {"esp","aimbot","world","misc","settings"}
+
 for _, name in ipairs(tabs) do
+    print("[MDMA] loading "..name.."...")
     local ok, err = pcall(function()
-        loadstring(httpGet(BASE..name))()
+        local src = httpGet(BASE..name)
+        local fn, compErr = loadstring(src)
+        if not fn then error("compile err: "..tostring(compErr)) end
+        fn()
     end)
     if not ok then
-        warn("["..name.."] failed: "..tostring(err))
+        warn("[MDMA] "..name.." FAILED: "..tostring(err))
+        Library:Notify(name.." failed to load", 4)
     else
-        print("["..name.."] ok")
+        print("[MDMA] "..name.." OK")
     end
-    task.wait(0.2)
+    task.wait(0.3)
 end
 
-ThemeManager:SetLibrary(Library)
-SaveManager:SetLibrary(Library)
-SaveManager:SetFolder("MDMA")
-ThemeManager:ApplyToTab(Window.Tabs["Settings"])
-SaveManager:LoadAutoloadConfig()
+-- apply addons after all tabs loaded
+pcall(function()
+    if ThemeManager then
+        ThemeManager:SetLibrary(Library)
+        local s = Window.Tabs["Settings"]
+        if s then ThemeManager:ApplyToTab(s) end
+    end
+end)
 
-Library:Notify("MDMA loaded", 3)
+pcall(function()
+    if SaveManager then
+        SaveManager:SetLibrary(Library)
+        SaveManager:SetFolder("MDMA")
+        SaveManager:LoadAutoloadConfig()
+    end
+end)
+
+Library:Notify("MDMA loaded  |  "..expiry, 4)
